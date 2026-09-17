@@ -1,0 +1,275 @@
+/* Yunta — tokens de los diseños
+   ────────────────────────────────────────────────────────────────────────
+   ⚠️ NO pegar este contenido dentro de index.css.
+
+   Copiá este ARCHIVO a apps/frontend/src/yunta-tokens.css e importalo en
+   main.tsx DESPUÉS de index.css:
+
+     import "./index.css";
+     import "./yunta-tokens.css";
+
+   Por qué: si index.css empieza con @import "tailwindcss" (o @tailwind base),
+   pegar reglas antes de esa línea hace que el navegador ignore el @import y se
+   cae la hoja completa — la app queda sin ninguna variable, con tipografía
+   serif y sin bordes. Como archivo aparte, eso no puede pasar.
+
+   Extiende lo que ya tenés: no renombra ni reemplaza ninguna variable
+   existente. Los diseños trabajan sobre el tema claro, así que la escala nueva
+   vive en :root y se re-mapea en [data-theme="dark"].
+
+   TRES PALETAS. El default es Terracota. Para cambiar de paleta, poné el
+   atributo en el <html>:
+
+     document.documentElement.dataset.palette = "azul";     // o "grafito"
+     delete document.documentElement.dataset.palette;       // vuelve a terracota
+
+   Ninguna pantalla necesita cambios: todas leen las mismas variables.
+
+   Única cosa que sí hay que tocar en index.css: el border-radius: 6px de los
+   controles. Borralo de ahí (este archivo lo define con var(--radius) = 8px).*/
+
+:root {
+  /* Escala de superficies (claro) — de la más al fondo a la más al frente */
+  --page: #f2efe9;            /* fondo de la página (= --cream) */
+  --card: #fbfaf7;            /* card / panel (= --cream-2) */
+  --field: #ffffff;           /* inputs dentro de un card */
+  --row-hover: #f7f5f0;       /* hover de fila de tabla */
+  --row-sel: #f6e4da;         /* fila seleccionada / destacada */
+
+  /* Bordes: dos pesos, nunca más */
+  --line: #e2dcd2;            /* borde de card y separador de sección */
+  --line-soft: #edeae3;       /* separador entre filas */
+  --line-strong: #d6d0c6;     /* borde de control (input, botón fantasma) */
+  --line-x-soft: #ded9d0;     /* borde de badge tenue y de pill "inactivo" */
+  --line-on-dark: #4a453d;    /* borde de control sobre la barra de tinta */
+  --line-inset: #e7e2d9;      /* divisor interno de un control compuesto */
+
+  /* Texto sobre cream */
+  --ink: #1b1917;             /* títulos y datos */
+  --ink-2: #5c564d;           /* cuerpo secundario */
+  --ink-3: #8a8378;           /* etiquetas y notas */
+  --ink-4: #a8a096;           /* deshabilitado / placeholder */
+  --ink-5: #6c665d;           /* texto apagado: pill inactiva, sección de sidebar */
+  --ink-on-dark: #cfc8bd;     /* cuerpo legible sobre tinta (panel del login) */
+
+  /* Acento terracota + su familia */
+  --accent: #b4552f;          /* acento terracota */
+  --accent-soft: #f6e4da;     /* fondo de badge de acento */
+  --accent-line: #e7c4b1;     /* borde de badge de acento */
+  --accent-ink: #8f3f1f;      /* texto sobre --accent-soft */
+
+  /* Neutros de dato (barras, avatares, categorías) */
+  --neutral: #c9c2b7;
+  --neutral-soft: #edeae3;
+  --clay: #8a5a2b;            /* tercera categoría en gráficos */
+  --stone: #5c564d;           /* cuarta categoría */
+  --ok: #7a8b5a;              /* dot de "activo" — único verde del sistema */
+
+  /* Sidebar: superficie oscura propia, no deriva de --page */
+  --sidebar-bg: #1b1917;
+  --sidebar-surface-2: #26231f;   /* fila activa / hover */
+  --sidebar-line: #2e2a26;        /* separadores internos */
+  --sidebar-text: #a8a096;        /* ítem inactivo */
+  --sidebar-text-strong: #f2efe9; /* ítem activo, wordmark */
+  --sidebar-section: #6c665d;     /* rótulo de sección */
+
+  /* Tipografía: una sola familia. Las etiquetas son Archivo 600 uppercase
+     con tracking, NO una mono. --mono queda solo para <code>.           */
+  --label-size: 10.5px;
+  --label-weight: 600;
+  --label-track: 0.13em;
+
+  /* Geometría: esquinas redondeadas. Escala fija — no inventar valores
+     intermedios. Avatares, dots y donut siguen siendo círculos (50%).   */
+  --radius-modal: 14px;   /* modal / diálogo */
+  --radius-card: 12px;    /* card, panel, sección, bloque bordeado */
+  --radius: 8px;          /* input, select, textarea, botón, checkbox */
+  --radius-pill: 999px;   /* badge, pill de estado y de prioridad */
+  --radius-tick: 3px;     /* marcas de color de proyecto (9x22) */
+}
+
+:root[data-theme="dark"] {
+  --page: #1b1917;
+  --card: #221f1c;
+  --field: #2a2622;
+  --row-hover: #26231f;
+  --row-sel: #332e28;
+
+  --line: #3a352e;
+  --line-soft: #2e2a26;
+  --line-strong: #4a453d;
+  --line-x-soft: #332e28;
+  --line-on-dark: #5c564d;
+  --line-inset: #2e2a26;
+
+  --ink: #f2efe9;
+  --ink-2: #a8a096;
+  --ink-3: #8a8378;
+  --ink-4: #6c665d;
+  --ink-5: #8a8378;
+  --ink-on-dark: #cfc8bd;
+
+  --accent-soft: rgba(180, 85, 47, 0.15);
+  --accent-line: rgba(180, 85, 47, 0.4);
+  --accent-ink: #d98a63;
+
+  --neutral: #4a453d;
+  --neutral-soft: #2a2622;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   PALETA "AZUL" — blanco puro, tinta azul marino, acento azul eléctrico.
+   La más clara y la de mayor contraste; se siente rápida y limpia.
+   ────────────────────────────────────────────────────────────────────────── */
+
+:root[data-palette="azul"] {
+  --page: #ffffff;
+  --card: #ffffff;
+  --field: #ffffff;
+  --canvas: #f4f7fb;          /* lienzo detrás de las cards */
+  --row-hover: #f4f7fb;
+  --row-sel: #e4edff;
+
+  --line: #e3e9f2;
+  --line-soft: #edf1f7;
+  --line-strong: #cfd9e6;
+  --line-x-soft: #dce4ef;
+  --line-on-dark: #2f415c;
+  --line-inset: #e6ebf3;
+
+  --ink: #0f1b2d;
+  --ink-2: #45566b;
+  --ink-3: #7a8aa0;
+  --ink-4: #9fadbf;
+  --ink-5: #64748b;
+  --ink-on-dark: #a9bbd1;
+
+  --accent: #0b5fff;
+  --accent-soft: #e4edff;
+  --accent-line: #b9cfff;
+  --accent-ink: #0842b8;
+
+  --neutral: #b6c2d2;
+  --neutral-soft: #edf1f7;
+  --clay: #0e9c9c;            /* teal: tercera categoría */
+  --stone: #45566b;
+  --ok: #10b37e;
+
+  --sidebar-bg: #0f1b2d;
+  --sidebar-surface-2: #1b2b42;
+  --sidebar-line: #22334d;
+  --sidebar-text: #9fadbf;
+  --sidebar-text-strong: #ffffff;
+  --sidebar-section: #64748b;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   PALETA "GRAFITO" — neutro frío casi negro + el mismo azul eléctrico.
+   El chrome oscuro vuelve, pero sin la calidez del marrón.
+   ────────────────────────────────────────────────────────────────────────── */
+
+:root[data-palette="grafito"] {
+  --page: #ffffff;
+  --card: #ffffff;
+  --field: #ffffff;
+  --canvas: #f5f6f8;
+  --row-hover: #f5f6f8;
+  --row-sel: #e4edff;
+
+  --line: #e4e6ea;
+  --line-soft: #eff0f3;
+  --line-strong: #d2d5db;
+  --line-x-soft: #dee0e5;
+  --line-on-dark: #3a3f47;
+  --line-inset: #e7e9ed;
+
+  --ink: #121417;
+  --ink-2: #4a4f57;
+  --ink-3: #868c96;
+  --ink-4: #a9aeb6;
+  --ink-5: #6b7078;
+  --ink-on-dark: #b5bac2;
+
+  --accent: #0b5fff;
+  --accent-soft: #e4edff;
+  --accent-line: #b9cfff;
+  --accent-ink: #0842b8;
+
+  --neutral: #b7bbc3;
+  --neutral-soft: #eff0f3;
+  --clay: #0e9c9c;
+  --stone: #4a4f57;
+  --ok: #10b37e;
+
+  --sidebar-bg: #121417;
+  --sidebar-surface-2: #1e2126;
+  --sidebar-line: #292d33;
+  --sidebar-text: #a9aeb6;
+  --sidebar-text-strong: #ffffff;
+  --sidebar-section: #6b7078;
+}
+
+/* Radio unificado de controles: reemplaza el 6px suelto de index.css.
+   Al vivir en un archivo importado después, gana por orden de cascada.   */
+input,
+textarea,
+select,
+button {
+  border-radius: var(--radius);
+}
+
+/* Etiqueta de campo / encabezado de columna / kicker */
+.y-label {
+  font-family: var(--sans);
+  font-size: var(--label-size);
+  font-weight: var(--label-weight);
+  letter-spacing: var(--label-track);
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* Dato numérico: la mono se fue, la alineación se mantiene con
+   font-variant-numeric en lugar de una segunda familia.                 */
+.y-num {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Enlaces y placeholders de las pantallas nuevas.
+
+   ⚠️ ACOTADO A PROPÓSITO: estas reglas van dentro de `main`, NO en `a` global.
+   El sidebar y cualquier superficie oscura tienen sus enlaces sobre tinta; una
+   regla global los pintaría de terracota y su hover quedaría negro sobre negro.
+   Si tu contenido no vive dentro de un <main>, cambiá el selector por el de tu
+   contenedor de página — pero NO lo saques.
+   ────────────────────────────────────────────────────────────────────────── */
+
+main a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+main a:hover {
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] main a:hover {
+  color: var(--accent-ink);
+}
+
+/* Placeholder: seguro a nivel global, no depende de la superficie. */
+input::placeholder,
+textarea::placeholder {
+  color: var(--ink-4);
+  opacity: 1; /* Firefox baja la opacidad por defecto */
+}
+
+/* El foco no debe pintar el anillo del navegador ni cambiar el radio.
+   Acotado a los controles del contenido: el sidebar maneja los suyos. */
+main input:focus,
+main textarea:focus,
+main select:focus {
+  outline: none;
+  border-color: var(--ink);
+}
