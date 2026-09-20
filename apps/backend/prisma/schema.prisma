@@ -1,0 +1,277 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  ADMIN
+  PM
+  DEVELOPER
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+}
+
+enum ProjectRole {
+  OWNER
+  EDITOR
+  VIEWER
+}
+
+/// Perfil de aplicación. El id es el mismo que auth.users.id de Supabase
+/// (no autogenerado): Supabase Auth es la fuente de identidad.
+model User {
+  id        String     @id
+  email     String     @unique
+  name      String
+  role      UserRole
+  status    UserStatus @default(PENDING)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  /// Soft delete (BACKEND.md §3.3): separado de `status` porque "eliminado"
+  /// no es uno de los tres estados de la grilla (§3.4) — un usuario borrado
+  /// no debe aparecer en el listado, ni siquiera como "Inactivo".
+  deletedAt DateTime?
+
+  memberships     ProjectMember[]
+  cardAssignments CardAssignee[]
+  activityLogs    ActivityLog[]
+  snapshots       UserDailySnapshot[]
+}
+
+model Project {
+  id          String    @id @default(cuid())
+  name        String
+  client      String?
+  description String?
+  startDate   DateTime?
+  endDate     DateTime?
+  archivedAt  DateTime?
+
+  /// Prefijo del código de tarjeta ("WEB" → WEB-12). Se deriva del nombre al
+  /// crear y no cambia si después se renombra: los códigos ya impresos o
+  /// citados no pueden moverse.
+  key String @unique
+
+  /// Próximo número de tarjeta del proyecto. Se incrementa en la misma
+  /// transacción que crea la tarjeta, así que no se repite ni se reutiliza.
+  nextCardNumber Int @default(1)
+
+  /// Marca de color (paleta de marca — mismos 5 hex que AVATAR_PALETTE en
+  /// el front). Sin POST /projects todavía: el default es un valor de
+  /// arranque; la asignación real por proyecto va en ese endpoint cuando
+  /// exista. Los ya creados se reparten por hash del id (ver migración).
+  color String @default("#1b1917")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members  ProjectMember[]
+  board     Board?
+  activity  ActivityLog[]
+  snapshots ProjectDailySnapshot[]
+}
+
+/// Rol de un usuario dentro de un proyecto puntual (distinto del rol global de User).
+model ProjectMember {
+  id        String      @id @default(cuid())
+  userId    String
+  projectId String
+  role      ProjectRole
+  createdAt DateTime    @default(now())
+
+  /// Por usuario, no por proyecto — cada quien favorita para sí.
+  isFavorite Boolean @default(false)
+
+  user    User    @relation(fields: [userId], references: [id])
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, projectId])
+}
+
+/// Un tablero por proyecto.
+model Board {
+  id        String   @id @default(cuid())
+  projectId String   @unique
+  name      String   @default("Tablero")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  columns Column[]
+}
+
+/// El estado de una tarjeta ES la columna en la que vive (BACKEND.md §1).
+/// No hay enum de estados: agregar una columna agrega un estado.
+model Column {
+  id        String   @id @default(cuid())
+  boardId   String
+  name      String
+  position  Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  board Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  cards Card[]
+
+  @@unique([boardId, position])
+}
+
+model Card {
+  id          String    @id @default(cuid())
+  columnId    String
+  title       String
+  description String?
+  position    Int
+  dueDate     DateTime?
+
+  /// Número correlativo dentro del proyecto: código = `${project.key}-${number}`.
+  number Int
+
+  /// Escala de esfuerzo del equipo. Valores permitidos: 1,2,3,5,8,13.
+  storyPoints Int?
+
+  /// Por qué se deja en 13 en vez de dividirla. Solo con storyPoints = 13;
+  /// se limpia al pasar a otro valor.
+  effortNote String?
+
+  /// Etapa de avance. Valores permitidos: 0,25,50,75,100.
+  progress Int @default(0)
+
+  /// Se setea cuando la tarjeta llega a la última columna o a progress=100.
+  completedAt DateTime?
+
+  /// Nullable: sin clasificar es un estado válido (no hay default).
+  priority CardPriority?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  column      Column           @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  assignees   CardAssignee[]
+  attachments CardAttachment[]
+
+  @@unique([columnId, position])
+}
+
+/// Asignación de tarjeta a persona, muchos a muchos (README: "asignados"
+/// como chips, varios por tarjeta). Habilita openCount/overdueCount por
+/// usuario (BACKEND.md §3.3) y las métricas de equipo (§3.2).
+model CardAssignee {
+  cardId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id])
+
+  @@id([cardId, userId])
+}
+
+/// Sin default a propósito: una tarjeta sin clasificar (null) es un estado
+/// legítimo, y un default de MEDIA diría algo que nadie decidió. BAJA existe
+/// como valor pero la UI no le dibuja badge: no se gasta tinta en lo normal.
+enum CardPriority {
+  ALTA
+  MEDIA
+  BAJA
+}
+
+enum ActivityType {
+  CARD_MOVED
+  CARD_PROGRESS_CHANGED
+  CARD_ASSIGNED
+  CARD_UNASSIGNED
+  COLUMN_CREATED
+  COLUMN_DELETED
+  COLUMN_REORDERED
+  PROJECT_UPDATED
+  PROJECT_ARCHIVED
+  PROJECT_UNARCHIVED
+  CARD_PRIORITY_CHANGED
+  PROJECT_CREATED
+  CARD_CREATED
+  CARD_UPDATED
+  MEMBER_ADDED
+  MEMBER_ROLE_CHANGED
+  MEMBER_REMOVED
+}
+
+/// "Actividad reciente" de Proyecto → Resumen (README §4). `message` ya
+/// viene resuelto en español desde el backend — no hay un mapa
+/// ActivityType→texto en el front para mantener sincronizado. `cardTitle`
+/// queda denormalizado a propósito: si la tarjeta se borra, la entrada del
+/// historial sigue teniendo sentido.
+model ActivityLog {
+  id        String       @id @default(cuid())
+  projectId String
+  userId    String
+  type      ActivityType
+  message   String
+  cardId    String?
+  cardTitle String?
+  createdAt DateTime     @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+}
+
+/// Adjunto de tarjeta (ARCHITECTURE.md §8): el archivo vive en el bucket
+/// privado de Supabase Storage, acá solo la referencia. `storagePath` es la
+/// ruta dentro del bucket "card-attachments"; nunca se expone directo, las
+/// descargas van por URL firmada de corta duración.
+model CardAttachment {
+  id          String   @id @default(cuid())
+  cardId      String
+  fileName    String
+  size        Int
+  storagePath String
+  createdAt   DateTime @default(now())
+
+  card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+}
+
+/// Foto diaria del estado de un proyecto, tomada a medianoche por un job
+/// (SnapshotsService). Existe porque el historial NO se puede reconstruir
+/// después: las tarjetas se reasignan, se reabren y se borran, y una serie
+/// "reconstruida" sería inventada. `date` es el día que se cerró (la foto de
+/// las 00:00 del 21 es la del día 20).
+model ProjectDailySnapshot {
+  projectId       String
+  date            DateTime @db.Date
+  openCards       Int
+  completedCards  Int
+  totalPoints     Int
+  completedPoints Int
+  createdAt       DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, date])
+}
+
+/// Lo mismo, por persona, para las series de los StatCards del Dashboard
+/// (asignadas / vencidas / vencen esta semana son personales: no salen de una
+/// foto por proyecto). Mismas definiciones que Usuarios y el Dashboard
+/// (cards/card-metrics.ts).
+model UserDailySnapshot {
+  userId    String
+  date      DateTime @db.Date
+  assigned  Int
+  overdue   Int
+  dueSoon   Int
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, date])
+}
