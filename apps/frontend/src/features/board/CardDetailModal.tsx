@@ -1,0 +1,229 @@
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
+import { Avatar } from '../../components/Avatar';
+import { Button, Label, Modal } from '../../components/ui';
+import { ApiError } from '../../lib/apiClient';
+import { formatFullDate } from '../../lib/formatRelativeTime';
+import { AttachmentsSection } from './AttachmentsSection';
+import { EffortProgressSection } from './EffortProgressSection';
+import { CardPriority, PRIORITY_LABEL } from './priority';
+import { useAssignees, useCardDetail, useMoveCard, useSetPriority, useUpdateCard } from './useBoard';
+
+const FIELD: CSSProperties = {
+  width: '100%',
+  boxSizing: 'border-box',
+  fontFamily: 'var(--sans)',
+  fontSize: 14,
+  color: 'var(--ink)',
+  background: 'var(--field)',
+  border: '1px solid var(--line-strong)',
+  borderRadius: 'var(--radius)',
+  padding: '9px 11px',
+};
+
+const PRIORITY_OPTIONS: (CardPriority | '')[] = ['', 'ALTA', 'MEDIA', 'BAJA'];
+
+/// Shell del detalle de tarjeta con lo que ya tiene backend: título, código,
+/// estado, prioridad, asignados, descripción, esfuerzo, avance y adjuntos. Falta
+/// (a propósito): comentarios y editar la fecha de entrega.
+export function CardDetailModal({ cardId, onClose }: { cardId: string; onClose: () => void }) {
+  const { data: card, isLoading, isError } = useCardDetail(cardId);
+
+  if (isLoading || isError || !card) {
+    return (
+      <Modal title={isError ? 'No se pudo cargar la tarjeta' : 'Cargando…'} width={780} onClose={onClose}>
+        <span style={{ fontSize: 14, color: 'var(--ink-3)' }}>{isError ? 'Puede que ya no exista o no tengas acceso.' : ' '}</span>
+      </Modal>
+    );
+  }
+  return <DetailBody card={card} onClose={onClose} />;
+}
+
+function DetailBody({ card, onClose }: { card: NonNullable<ReturnType<typeof useCardDetail>['data']>; onClose: () => void }) {
+  const update = useUpdateCard(card.id);
+  const setPriority = useSetPriority(card.id);
+  const assignees = useAssignees(card.id);
+  const move = useMoveCard(card.project.id);
+
+  const [title, setTitle] = useState(card.title);
+  const titleRef = useRef<HTMLTextAreaElement>(null);
+  const [description, setDescription] = useState(card.description ?? '');
+  // Si la tarjeta cambia desde afuera (otro usuario, otra pestaña), se refleja.
+  useEffect(() => setTitle(card.title), [card.title]);
+  useEffect(() => setDescription(card.description ?? ''), [card.description]);
+
+  // El título es un campo que crece con el texto: en un input de una línea un
+  // título largo quedaba cortado y no se podía leer entero.
+  useLayoutEffect(() => {
+    const el = titleRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [title]);
+
+  const error = [update, setPriority, assignees, move].find((m) => m.isError)?.error;
+  const readOnly = !card.canEdit;
+
+  function saveTitle() {
+    const value = title.trim();
+    if (!value) return setTitle(card.title); // vacío: vuelve al que tenía
+    if (value !== card.title) update.mutate({ title: value });
+  }
+
+  function saveDescription() {
+    if (description.trim() !== (card.description ?? '')) update.mutate({ description });
+  }
+
+  const unassigned = card.members.filter((m) => !card.assignees.some((a) => a.id === m.id));
+
+  return (
+    <Modal
+      width={780}
+      onClose={onClose}
+      header={
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, padding: '22px 26px 18px', borderBottom: '1px solid var(--line-strong)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--ink-3)' }}>
+              <span style={{ width: 8, height: 8, borderRadius: 2, background: card.project.color }} />
+              {card.project.name}
+              <span style={{ fontFamily: 'var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace)', letterSpacing: '0.02em', color: 'var(--ink-2)' }}>· {card.code}</span>
+            </span>
+            <textarea
+              ref={titleRef}
+              value={title}
+              disabled={readOnly}
+              rows={1}
+              onChange={(event) => setTitle(event.target.value.replace(/\n/g, ' '))}
+              onBlur={saveTitle}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  (event.target as HTMLTextAreaElement).blur();
+                }
+              }}
+              maxLength={200}
+              aria-label="Título"
+              style={{ fontFamily: 'var(--sans)', fontSize: 22, fontWeight: 800, letterSpacing: '-0.028em', lineHeight: 1.2, color: 'var(--ink)', background: 'transparent', border: '1px solid transparent', borderRadius: 8, padding: '4px 8px', margin: '0 -8px', resize: 'none', overflow: 'hidden' }}
+            />
+          </div>
+          <Button variant="ghost" onClick={onClose} style={{ fontSize: 20, lineHeight: 1, color: 'var(--ink-3)', padding: '6px 11px' }}>
+            ×
+          </Button>
+        </div>
+      }
+    >
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 250px', gap: 28 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <Label track="0.13em">Descripción</Label>
+          <textarea
+            value={description}
+            disabled={readOnly}
+            onChange={(event) => setDescription(event.target.value)}
+            onBlur={saveDescription}
+            placeholder={readOnly ? 'Sin descripción.' : 'Agregá contexto, criterios de aceptación, links…'}
+            rows={5}
+            style={{ ...FIELD, resize: 'vertical', lineHeight: 1.5 }}
+          />
+          <div style={{ marginTop: 10 }}>
+            <EffortProgressSection card={card} readOnly={readOnly} />
+          </div>
+          <AttachmentsSection cardId={card.id} readOnly={readOnly} />
+          <span style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 4 }}>Próximamente: comentarios.</span>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <Field label="Estado">
+            <select
+              value={card.column.id}
+              disabled={readOnly || move.isPending}
+              onChange={(event) => move.mutate({ cardId: card.id, columnId: event.target.value })}
+              style={FIELD}
+            >
+              {card.columns.map((column) => (
+                <option key={column.id} value={column.id}>
+                  {column.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="Prioridad">
+            <select
+              value={card.priority ?? ''}
+              disabled={readOnly || setPriority.isPending}
+              onChange={(event) => setPriority.mutate((event.target.value || null) as CardPriority | null)}
+              style={FIELD}
+            >
+              {PRIORITY_OPTIONS.map((option) => (
+                <option key={option || 'none'} value={option}>
+                  {option ? PRIORITY_LABEL[option] : 'Sin clasificar'}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="Asignados">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {card.assignees.length === 0 && <span style={{ fontSize: 13, color: 'var(--ink-4)' }}>Nadie asignado.</span>}
+              {card.assignees.map((person) => (
+                <div key={person.id} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                  <Avatar seed={person.id} name={person.name} size={24} />
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{person.name}</span>
+                  {!readOnly && (
+                    <button
+                      onClick={() => assignees.mutate({ userId: person.id, assign: false })}
+                      title="Quitar"
+                      disabled={assignees.isPending}
+                      style={{ background: 'transparent', border: 0, cursor: 'pointer', color: 'var(--ink-4)', fontSize: 16, padding: '0 4px' }}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
+              {!readOnly && unassigned.length > 0 && (
+                <select
+                  value=""
+                  disabled={assignees.isPending}
+                  onChange={(event) => event.target.value && assignees.mutate({ userId: event.target.value, assign: true })}
+                  style={{ ...FIELD, fontSize: 13, color: 'var(--ink-3)' }}
+                >
+                  <option value="">+ Asignar…</option>
+                  {unassigned.map((member) => (
+                    <option key={member.id} value={member.id}>
+                      {member.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </Field>
+
+          <Field label="Entrega">
+            <span style={{ fontSize: 13.5, color: card.dueState === 'overdue' ? 'var(--accent-ink)' : 'var(--ink)' }}>
+              {card.dueDate ? formatFullDate(card.dueDate) : 'Sin fecha'}
+              {card.dueState === 'overdue' && ' · vencida'}
+              {card.dueState === 'soon' && ' · vence pronto'}
+            </span>
+          </Field>
+
+          <Field label="Creada">
+            <span style={{ fontSize: 13.5, color: 'var(--ink-2)' }}>{formatFullDate(card.createdAt)}</span>
+          </Field>
+        </div>
+      </div>
+
+      {readOnly && <p style={{ margin: '18px 0 0', fontSize: 12.5, color: 'var(--ink-3)' }}>Solo lectura: tu rol en este proyecto no permite editar tarjetas.</p>}
+      {error && <p style={{ margin: '14px 0 0', fontSize: 13, color: 'var(--accent-ink)' }}>{error instanceof ApiError ? error.message : 'No se pudo guardar el cambio.'}</p>}
+    </Modal>
+  );
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+      <Label track="0.13em">{label}</Label>
+      {children}
+    </div>
+  );
+}
