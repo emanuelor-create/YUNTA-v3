@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button, Label } from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
-import { EFFORT_SCALE, effortLevel, PROGRESS_STAGES, progressStage } from './effortProgress';
+import { EFFORT_SCALE, effortLevel, examplesText, PROGRESS_STAGES, progressStage } from './effortProgress';
 import { CardDetail, useSetProgress, useSetStoryPoints } from './useBoard';
 
 /// "Esfuerzo y avance": los dos sectores de medición del detalle. Sin horas —
@@ -210,7 +210,7 @@ function EffortPicker({
       </div>
 
       <span style={{ fontSize: 13, lineHeight: 1.45, color: 'var(--ink-3)', minHeight: 19 }}>
-        {shown ? `Ej.: ${shown.example}` : 'Elegí un valor de la escala. Es un tamaño relativo, no horas.'}
+        {shown ? examplesText(shown) : 'Elegí un valor de la escala. Es un tamaño relativo, no horas.'}
       </span>
 
       {showScale && <ScaleTable selected={card.storyPoints} />}
@@ -229,13 +229,13 @@ function ScaleTable({ selected }: { selected: number | null }) {
           <div
             key={level.value}
             role="row"
-            style={{ display: 'grid', gridTemplateColumns: '34px 84px minmax(0,1fr)', gap: 12, alignItems: 'start', padding: '10px 12px', borderTop: i === 0 ? undefined : '1px solid var(--line-soft)', background: selected === level.value ? 'var(--row-sel)' : undefined }}
+            style={{ display: 'grid', gridTemplateColumns: '34px 96px minmax(0,1fr)', gap: 12, alignItems: 'start', padding: '10px 12px', borderTop: i === 0 ? undefined : '1px solid var(--line-soft)', background: selected === level.value ? 'var(--row-sel)' : undefined }}
           >
             <span role="cell" style={{ fontSize: 15, fontWeight: 700, color: big ? 'var(--accent)' : 'var(--ink)' }}>{level.value}</span>
             <span role="cell" style={{ fontSize: 13, fontWeight: 600, color: big ? 'var(--accent-ink)' : 'var(--ink)' }}>{level.magnitude}</span>
             <span role="cell" style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 12.5, lineHeight: 1.4 }}>
               <span style={{ color: 'var(--ink-2)' }}>{level.description}</span>
-              <span style={{ color: 'var(--ink-3)' }}>Ej.: {level.example}</span>
+              <span style={{ color: 'var(--ink-3)' }}>{examplesText(level)}</span>
             </span>
           </div>
         );
