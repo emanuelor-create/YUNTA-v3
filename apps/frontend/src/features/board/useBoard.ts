@@ -250,3 +250,52 @@ export async function downloadAttachment(cardId: string, attachment: Attachment)
   link.click();
   link.remove();
 }
+
+// ── Comentarios ──────────────────────────────────────────────────────────
+
+export interface Comment {
+  id: string;
+  text: string;
+  createdAt: string;
+  /// null mientras no se editó.
+  editedAt: string | null;
+  author: { id: string; name: string };
+  /// Lo decide el servidor: solo lo propio se edita y se borra.
+  mine: boolean;
+}
+
+export const MAX_COMMENT_LENGTH = 2000;
+
+export function useComments(cardId: string) {
+  return useQuery({
+    queryKey: ['cards', 'comments', cardId],
+    queryFn: () => apiFetch<Comment[]>(`/cards/${cardId}/comments`),
+  });
+}
+
+// Cada alta, edición y baja queda en Actividad: se refresca todo lo que cuelga
+// de ['projects'] y del Dashboard, no solo la lista.
+export function useAddComment(cardId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (text: string) => apiFetch<Comment>(`/cards/${cardId}/comments`, { method: 'POST', body: JSON.stringify({ text }) }),
+    onSuccess: () => refreshAfterBoardChange(queryClient),
+  });
+}
+
+export function useEditComment(cardId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ commentId, text }: { commentId: string; text: string }) =>
+      apiFetch<Comment>(`/cards/${cardId}/comments/${commentId}`, { method: 'PATCH', body: JSON.stringify({ text }) }),
+    onSuccess: () => refreshAfterBoardChange(queryClient),
+  });
+}
+
+export function useDeleteComment(cardId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (commentId: string) => apiFetch(`/cards/${cardId}/comments/${commentId}`, { method: 'DELETE' }),
+    onSuccess: () => refreshAfterBoardChange(queryClient),
+  });
+}

@@ -5,6 +5,7 @@ import { Button, Label, Modal } from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
 import { formatFullDate } from '../../lib/formatRelativeTime';
 import { AttachmentsSection } from './AttachmentsSection';
+import { CommentsSection } from './CommentsSection';
 import { EffortProgressSection } from './EffortProgressSection';
 import { CardPriority, PRIORITY_LABEL } from './priority';
 import { useAssignees, useCardDetail, useMoveCard, useSetPriority, useUpdateCard } from './useBoard';
@@ -24,8 +25,8 @@ const FIELD: CSSProperties = {
 const PRIORITY_OPTIONS: (CardPriority | '')[] = ['', 'ALTA', 'MEDIA', 'BAJA'];
 
 /// Shell del detalle de tarjeta con lo que ya tiene backend: título, código,
-/// estado, prioridad, asignados, descripción, esfuerzo, avance y adjuntos. Falta
-/// (a propósito): comentarios y editar la fecha de entrega.
+/// estado, prioridad, asignados, descripción, esfuerzo, avance, adjuntos y
+/// comentarios. Falta (a propósito): editar la fecha de entrega.
 export function CardDetailModal({ cardId, onClose }: { cardId: string; onClose: () => void }) {
   const { data: card, isLoading, isError } = useCardDetail(cardId);
 
@@ -128,7 +129,6 @@ function DetailBody({ card, onClose }: { card: NonNullable<ReturnType<typeof use
             <EffortProgressSection card={card} readOnly={readOnly} />
           </div>
           <AttachmentsSection cardId={card.id} readOnly={readOnly} />
-          <span style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 4 }}>Próximamente: comentarios.</span>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -211,6 +211,11 @@ function DetailBody({ card, onClose }: { card: NonNullable<ReturnType<typeof use
             <span style={{ fontSize: 13.5, color: 'var(--ink-2)' }}>{formatFullDate(card.createdAt)}</span>
           </Field>
         </div>
+      </div>
+
+      {/* Al pie del modal, ancho completo: es lo último del detalle. Comentar está abierto a todo miembro, VIEWER incluido. */}
+      <div style={{ marginTop: 24 }}>
+        <CommentsSection cardId={card.id} />
       </div>
 
       {readOnly && <p style={{ margin: '18px 0 0', fontSize: 12.5, color: 'var(--ink-3)' }}>Solo lectura: tu rol en este proyecto no permite editar tarjetas.</p>}

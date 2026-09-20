@@ -46,6 +46,7 @@ model User {
   cardAssignments CardAssignee[]
   activityLogs    ActivityLog[]
   snapshots       UserDailySnapshot[]
+  comments        Comment[]
 }
 
 model Project {
@@ -159,6 +160,7 @@ model Card {
   column      Column           @relation(fields: [columnId], references: [id], onDelete: Cascade)
   assignees   CardAssignee[]
   attachments CardAttachment[]
+  comments    Comment[]
 
   @@unique([columnId, position])
 }
@@ -201,6 +203,9 @@ enum ActivityType {
   PROJECT_CREATED
   CARD_CREATED
   CARD_UPDATED
+  COMMENT_ADDED
+  COMMENT_EDITED
+  COMMENT_DELETED
   MEMBER_ADDED
   MEMBER_ROLE_CHANGED
   MEMBER_REMOVED
@@ -274,4 +279,20 @@ model UserDailySnapshot {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, date])
+}
+
+/// Comentario de una tarjeta. `editedAt` es null mientras no se editó: la UI
+/// muestra "editado" solo si tiene valor. Editar y borrar es solo del autor.
+model Comment {
+  id        String    @id @default(cuid())
+  cardId    String
+  authorId  String
+  text      String
+  createdAt DateTime  @default(now())
+  editedAt  DateTime?
+
+  card   Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id])
+
+  @@index([cardId, createdAt])
 }

@@ -379,6 +379,16 @@ async function main() {
     });
   }
 
+  // Comentarios de demostración en una tarjeta con conversación (uno editado,
+  // uno tuyo). Se borran con el proyecto, por cascada.
+  await prisma.comment.createMany({
+    data: [
+      { id: 'seed-comment-1', cardId: 'seed-card-web-6', authorId: seedUserId('carla'), text: 'Terminé el relevamiento de las plantillas. Falta revisar el blog.', createdAt: ago(0, 30) },
+      { id: 'seed-comment-2', cardId: 'seed-card-web-6', authorId: seedUserId('ana'), text: 'Buenísimo. ¿Podés priorizar el formulario de contacto?\nEs lo que más tráfico tiene.', createdAt: ago(0, 8), editedAt: ago(0, 7) },
+      { id: 'seed-comment-3', cardId: 'seed-card-web-6', authorId: admin.id, text: 'Lo dejo en revisión hasta que esté el formulario.', createdAt: ago(0, 1) },
+    ],
+  });
+
   console.log(
     `Seed listo: ${PROJECTS.length} proyectos, ${cardCount} tarjetas, ${SEED_USERS.length} usuarios ficticios. Vos (${adminEmail}) sos miembro de ${PROJECTS.length}.`,
   );
