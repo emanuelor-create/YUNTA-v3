@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Card, CardPriority, Column, Prisma } from '@prisma/client';
 import { ActivityLogService } from '../activity/activity-log.service';
 import { projectAccess } from '../auth/project-access';
@@ -6,6 +6,7 @@ import { cardCode } from '../projects/project-key';
 import { dueState } from './card-metrics';
 import { syncContainer } from './container-rollup';
 import { PrismaService } from '../prisma/prisma.service';
+import { SupabaseStorageService } from '../supabase/supabase-storage.service';
 
 const STORY_POINTS_SCALE = [1, 2, 3, 5, 8, 13] as const;
 const PROGRESS_SCALE = [0, 25, 50, 75, 100] as const;
@@ -15,6 +16,13 @@ const PRIORITY_LABEL: Record<CardPriority, string> = { ALTA: 'Alta', MEDIA: 'Med
 const MAX_TITLE_LENGTH = 200;
 const MAX_EFFORT_NOTE_LENGTH = 500;
 const MAX_SUBTASKS = 12;
+
+/// La entrega es una FECHA, sin hora: se guarda a las 15:00 UTC (mediodía en
+/// Argentina), la misma convención de las fechas de proyecto, para que caiga en
+/// el mismo día en cualquier huso razonable.
+const DUE_DATE_HOUR_UTC = 15;
+const formatDueDate = (date: Date) =>
+  new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(date);
 
 const points = (n: number) => `${n} ${n === 1 ? 'punto' : 'puntos'}`;
 
@@ -70,9 +78,12 @@ type CardWithColumn = Prisma.CardGetPayload<{ include: { column: { include: { bo
 
 @Injectable()
 export class CardsService {
+  private readonly logger = new Logger(CardsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly activityLog: ActivityLogService,
+    private readonly storage: SupabaseStorageService,
   ) {}
 
   /// Mover la tarjeta a otra columna del mismo tablero, o reordenarla dentro
@@ -601,6 +612,89 @@ export class CardsService {
       cardTitle: card.title,
     });
     return updated;
+  }
+
+  /// Fecha de entrega: 'AAAA-MM-DD' o null (sin fecha). Idempotente. Un
+  /// contenedor no tiene fecha propia: la tienen sus subtareas.
+  async updateDueDate(cardId: string, value: string | null, actorId: string): Promise<Card> {
+    const dueDate = this.parseDueDate(value);
+    const card = await this.getCardOrThrow(cardId);
+    this.assertNotContainer(card, 'no tiene fecha de entrega propia, la tienen sus subtareas.');
+    if ((card.dueDate?.getTime() ?? null) === (dueDate?.getTime() ?? null)) return card;
+
+    const updated = await this.prisma.card.update({ where: { id: cardId }, data: { dueDate } });
+
+    const message =
+      dueDate === null
+        ? 'quitó la fecha de entrega'
+        : card.dueDate === null
+          ? `fijó la entrega para el ${formatDueDate(dueDate)}`
+          : `cambió la entrega del ${formatDueDate(card.dueDate)} al ${formatDueDate(dueDate)}`;
+    await this.activityLog.log({
+      projectId: card.column.board.projectId,
+      userId: actorId,
+      type: 'CARD_UPDATED',
+      message,
+      cardId: card.id,
+      cardTitle: card.title,
+    });
+    return updated;
+  }
+
+  /// Borra la tarjeta con sus adjuntos, comentarios y asignados (cascada). Una
+  /// tarjeta dividida NO se borra: sus subtareas quedarían huérfanas o
+  /// desaparecerían sin que nadie lo decida, y lo que cuentan las métricas
+  /// cambiaría de golpe. Hay que resolver primero las subtareas (borrarlas una
+  /// por una). Al borrar una subtarea, su madre se re-deriva con las que quedan.
+  async remove(cardId: string, actorId: string): Promise<void> {
+    const card = await this.getCardOrThrow(cardId);
+    const children = card._count?.children ?? 0;
+    if (children > 0) {
+      throw new ConflictException(
+        `Esta tarjeta está dividida en ${children} ${children === 1 ? 'subtarea' : 'subtareas'}: no se puede borrar sin decidir qué pasa con ellas. ` +
+          'Borrá primero cada subtarea (o abrilas y resolvelas); cuando no queden, podés borrar esta.',
+      );
+    }
+
+    // leaf-ok: junta los archivos de una tarjeta para borrarlos de Storage; no cuenta trabajo.
+    const attachments = await this.prisma.cardAttachment.findMany({ where: { cardId }, select: { storagePath: true } });
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.card.delete({ where: { id: cardId } });
+      if (card.parentId) await syncContainer(tx, card.parentId);
+    });
+
+    // Los archivos viven en Storage, no en la base: si falla, la tarjeta ya no
+    // existe y queda un archivo huérfano — se loguea, no se resucita lo borrado.
+    for (const { storagePath } of attachments) {
+      try {
+        await this.storage.remove(storagePath);
+      } catch (error) {
+        this.logger.warn(`Adjunto huérfano tras borrar la tarjeta ${cardId}: ${storagePath} (${String(error)})`);
+      }
+    }
+
+    await this.activityLog.log({
+      projectId: card.column.board.projectId,
+      userId: actorId,
+      type: 'CARD_UPDATED',
+      message: card.parentId ? `eliminó la subtarea "${card.title}"` : `eliminó la tarjeta "${card.title}"`,
+      cardId: card.id,
+      cardTitle: card.title,
+    });
+  }
+
+  private parseDueDate(value: string | null): Date | null {
+    if (value === null) return null;
+    const match = typeof value === 'string' ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(value) : null;
+    if (!match) throw new BadRequestException("dueDate debe ser una fecha 'AAAA-MM-DD' o null");
+    const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+    const date = new Date(Date.UTC(year, month - 1, day, DUE_DATE_HOUR_UTC));
+    // Date.UTC(2026, 1, 31) se "corrige" a marzo: se rechaza en vez de guardar otra fecha.
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+      throw new BadRequestException(`dueDate no es una fecha válida: ${value}`);
+    }
+    return date;
   }
 
   /// "Asignados" del README (chips + "+ Asignar…"): muchos a muchos vía

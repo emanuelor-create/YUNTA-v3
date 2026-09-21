@@ -185,6 +185,32 @@ export function useSetPriority(cardId: string) {
   });
 }
 
+/// Fecha de entrega ('AAAA-MM-DD' o null). Cambia "vence pronto" y "vencidas" en
+/// el Dashboard y el Resumen: se refresca todo.
+export function useSetDueDate(cardId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dueDate: string | null) =>
+      apiFetch(`/cards/${cardId}/due-date`, { method: 'PATCH', body: JSON.stringify({ dueDate }) }),
+    onSuccess: () => refreshAfterBoardChange(queryClient),
+  });
+}
+
+/// Borra la tarjeta. El servidor rechaza (409) una dividida en subtareas. Al
+/// éxito no se refresca lo de esta tarjeta (detalle, comentarios, adjuntos): ya
+/// no existe y pedirlo daría 404; sí el resto, incl. la madre si era subtarea.
+export function useDeleteCard(cardId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch(`/cards/${cardId}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['cards'], predicate: (query) => query.queryKey[2] !== cardId });
+    },
+  });
+}
+
 export function useAssignees(cardId: string) {
   const queryClient = useQueryClient();
   return useMutation({

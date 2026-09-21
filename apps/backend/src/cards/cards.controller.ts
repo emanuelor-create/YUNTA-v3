@@ -34,6 +34,11 @@ interface UpdatePriorityBody {
   priority?: CardPriority | null;
 }
 
+interface UpdateDueDateBody {
+  /// 'AAAA-MM-DD' o null (sin fecha); undefined (campo ausente) es un error.
+  dueDate?: string | null;
+}
+
 @Controller('cards')
 @UseGuards(AuthGuard, RolesGuard)
 @ProjectScope('card', 'id')
@@ -103,6 +108,23 @@ export class CardsController {
       throw new BadRequestException('priority es requerido (usá null para dejarla sin clasificar)');
     }
     return this.cards.updatePriority(id, body.priority, request.auth.userId);
+  }
+
+  @Patch(':id/due-date')
+  @ProjectRoles(ProjectRole.OWNER, ProjectRole.EDITOR)
+  updateDueDate(@Param('id') id: string, @Body() body: UpdateDueDateBody, @Req() request: AuthenticatedRequest) {
+    if (body.dueDate === undefined) {
+      throw new BadRequestException('dueDate es requerido (usá null para quitar la fecha)');
+    }
+    return this.cards.updateDueDate(id, body.dueDate, request.auth.userId);
+  }
+
+  /// Borra la tarjeta (con adjuntos y comentarios). Una dividida en subtareas se rechaza con 409.
+  @Delete(':id')
+  @HttpCode(204)
+  @ProjectRoles(ProjectRole.OWNER, ProjectRole.EDITOR)
+  async remove(@Param('id') id: string, @Req() request: AuthenticatedRequest) {
+    await this.cards.remove(id, request.auth.userId);
   }
 
   @Post(':id/assignees/:userId')

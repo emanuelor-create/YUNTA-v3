@@ -9,7 +9,7 @@ import { CommentsSection } from './CommentsSection';
 import { EffortProgressSection } from './EffortProgressSection';
 import { SubtasksSection } from './SubtasksSection';
 import { CardPriority, PRIORITY_LABEL } from './priority';
-import { useAssignees, useCardDetail, useMoveCard, useSetPriority, useUpdateCard } from './useBoard';
+import { useAssignees, useCardDetail, useDeleteCard, useMoveCard, useSetDueDate, useSetPriority, useUpdateCard } from './useBoard';
 
 const FIELD: CSSProperties = {
   width: '100%',
@@ -26,8 +26,8 @@ const FIELD: CSSProperties = {
 const PRIORITY_OPTIONS: (CardPriority | '')[] = ['', 'ALTA', 'MEDIA', 'BAJA'];
 
 /// Shell del detalle de tarjeta con lo que ya tiene backend: título, código,
-/// estado, prioridad, asignados, descripción, esfuerzo, avance, adjuntos y
-/// comentarios. Falta (a propósito): editar la fecha de entrega.
+/// estado, prioridad, asignados, fecha de entrega, descripción, esfuerzo, avance,
+/// adjuntos, comentarios y borrar la tarjeta.
 export function CardDetailModal({ cardId, onClose, onOpenCard }: { cardId: string; onClose: () => void; onOpenCard: (cardId: string) => void }) {
   const { data: card, isLoading, isError } = useCardDetail(cardId);
 
@@ -46,6 +46,24 @@ function DetailBody({ card, onClose, onOpenCard }: { card: NonNullable<ReturnTyp
   const setPriority = useSetPriority(card.id);
   const assignees = useAssignees(card.id);
   const move = useMoveCard(card.project.id);
+  const setDueDate = useSetDueDate(card.id);
+  const remove = useDeleteCard(card.id);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  // La fecha se guarda tras una pausa de tipeo, no en cada cambio: el navegador
+  // dispara `change` por cada dígito del año (0002, 0020, 0202, 2026) y cada uno
+  // sería una fecha guardada y una entrada en Actividad.
+  const serverDue = card.dueDate ? card.dueDate.slice(0, 10) : '';
+  const [dueInput, setDueInput] = useState(serverDue);
+  useEffect(() => setDueInput(serverDue), [serverDue]);
+  useEffect(() => {
+    if (dueInput === serverDue) return;
+    const year = Number(dueInput.slice(0, 4));
+    if (dueInput !== '' && !(year >= 2000 && year <= 2100)) return;
+    const timer = setTimeout(() => setDueDate.mutate(dueInput || null), 700);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dueInput, serverDue]);
 
   const [title, setTitle] = useState(card.title);
   const titleRef = useRef<HTMLTextAreaElement>(null);
@@ -63,7 +81,7 @@ function DetailBody({ card, onClose, onOpenCard }: { card: NonNullable<ReturnTyp
     el.style.height = `${el.scrollHeight}px`;
   }, [title]);
 
-  const error = [update, setPriority, assignees, move].find((m) => m.isError)?.error;
+  const error = [update, setPriority, assignees, move, setDueDate, remove].find((m) => m.isError)?.error;
   const readOnly = !card.canEdit;
 
   function saveTitle() {
@@ -223,11 +241,43 @@ function DetailBody({ card, onClose, onOpenCard }: { card: NonNullable<ReturnTyp
 
           {!card.isContainer && (
           <Field label="Entrega">
-            <span style={{ fontSize: 13.5, color: card.dueState === 'overdue' ? 'var(--accent-ink)' : 'var(--ink)' }}>
-              {card.dueDate ? formatFullDate(card.dueDate) : 'Sin fecha'}
-              {card.dueState === 'overdue' && ' · vencida'}
-              {card.dueState === 'soon' && ' · vence pronto'}
-            </span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {readOnly ? (
+                <span style={{ fontSize: 13.5, color: card.dueState === 'overdue' ? 'var(--accent-ink)' : 'var(--ink)' }}>
+                  {card.dueDate ? formatFullDate(card.dueDate) : 'Sin fecha'}
+                </span>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    type="date"
+                    aria-label="Fecha de entrega"
+                    value={dueInput}
+                    min="2000-01-01"
+                    max="2100-12-31"
+                    onChange={(event) => setDueInput(event.target.value)}
+                    style={{ ...FIELD, flex: 1, minWidth: 0 }}
+                  />
+                  {dueInput && (
+                    <button
+                      type="button"
+                      onClick={() => setDueInput('')}
+                      disabled={setDueDate.isPending}
+                      title="Quitar la fecha"
+                      style={{ background: 'transparent', border: 0, cursor: 'pointer', color: 'var(--ink-4)', fontSize: 16, padding: '0 4px' }}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              )}
+              {(card.dueState || !card.dueDate) && (
+                <span style={{ fontSize: 12.5, color: card.dueState === 'overdue' ? 'var(--accent-ink)' : 'var(--ink-3)' }}>
+                  {!card.dueDate && 'Sin fecha'}
+                  {card.dueState === 'overdue' && 'Vencida'}
+                  {card.dueState === 'soon' && 'Vence pronto'}
+                </span>
+              )}
+            </div>
           </Field>
           )}
 
@@ -241,6 +291,38 @@ function DetailBody({ card, onClose, onOpenCard }: { card: NonNullable<ReturnTyp
       <div style={{ marginTop: 24 }}>
         <CommentsSection cardId={card.id} />
       </div>
+
+      {!readOnly && (
+        <div data-delete-zone style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--line-soft)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
+          {card.isContainer ? (
+            <>
+              <Button variant="ghost" disabled title="Dividida en subtareas">
+                Eliminar tarjeta
+              </Button>
+              <span style={{ flex: 1, minWidth: 220, fontSize: 12.5, lineHeight: 1.45, color: 'var(--ink-3)' }}>
+                No se puede eliminar mientras esté dividida en {card.subtasks.length} {card.subtasks.length === 1 ? 'subtarea' : 'subtareas'}: sin decidir qué pasa con ellas quedarían huérfanas o
+                desaparecerían de golpe. Eliminá primero cada subtarea.
+              </span>
+            </>
+          ) : confirmingDelete ? (
+            <>
+              <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>
+                ¿Eliminar {card.parent ? 'esta subtarea' : 'la tarjeta'} «{card.title}»? Se borran también sus adjuntos y comentarios. No se puede deshacer.
+              </span>
+              <Button variant="primary" disabled={remove.isPending} onClick={() => remove.mutate(undefined, { onSuccess: onClose })}>
+                {remove.isPending ? 'Eliminando…' : 'Sí, eliminar'}
+              </Button>
+              <Button variant="ghost" disabled={remove.isPending} onClick={() => setConfirmingDelete(false)}>
+                Cancelar
+              </Button>
+            </>
+          ) : (
+            <Button variant="ghost" onClick={() => setConfirmingDelete(true)}>
+              {card.parent ? 'Eliminar subtarea' : 'Eliminar tarjeta'}
+            </Button>
+          )}
+        </div>
+      )}
 
       {readOnly && <p style={{ margin: '18px 0 0', fontSize: 12.5, color: 'var(--ink-3)' }}>Solo lectura: tu rol en este proyecto no permite editar tarjetas.</p>}
       {error && <p style={{ margin: '14px 0 0', fontSize: 13, color: 'var(--accent-ink)' }}>{error instanceof ApiError ? error.message : 'No se pudo guardar el cambio.'}</p>}

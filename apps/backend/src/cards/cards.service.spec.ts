@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { ActivityLogService } from '../activity/activity-log.service';
 import { CardsService } from './cards.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { SupabaseStorageService } from '../supabase/supabase-storage.service';
 
 const PROJECT_ID = 'proj-1';
 const ACTOR_ID = 'actor-1';
@@ -79,6 +80,7 @@ describe('CardsService', () => {
         CardsService,
         { provide: PrismaService, useValue: prisma },
         { provide: ActivityLogService, useValue: activityLog },
+        { provide: SupabaseStorageService, useValue: { remove: jest.fn() } },
       ],
     }).compile();
 

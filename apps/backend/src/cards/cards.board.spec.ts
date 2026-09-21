@@ -1,6 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ActivityLogService } from '../activity/activity-log.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { SupabaseStorageService } from '../supabase/supabase-storage.service';
 import { CardsService } from './cards.service';
 
 const PROJECT_ID = 'proj-1';
@@ -96,6 +97,7 @@ describe('CardsService — orden, alta y detalle', () => {
   let fake: FakeCards;
   let prisma: Record<string, any>;
   let activityLog: { log: jest.Mock };
+  let storage: { remove: jest.Mock };
   let service: CardsService;
 
   function build() {
@@ -121,7 +123,8 @@ describe('CardsService — orden, alta y detalle', () => {
     };
     prisma.$transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(prisma));
     activityLog = { log: jest.fn() };
-    service = new CardsService(prisma as unknown as PrismaService, activityLog as unknown as ActivityLogService);
+    storage = { remove: jest.fn().mockResolvedValue(undefined) };
+    service = new CardsService(prisma as unknown as PrismaService, activityLog as unknown as ActivityLogService, storage as unknown as SupabaseStorageService);
   }
 
   beforeEach(build);
