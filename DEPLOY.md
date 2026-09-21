@@ -1,8 +1,10 @@
 # Deploy de YUNTA
 
 Backend (NestJS + Prisma) en **Railway**, frontend (React + Vite) en **Vercel**,
-los dos contra la **misma Supabase** (base, Auth y Storage) que ya se usa en
-desarrollo. Node **>= 22.12** en todo (`engines` en la raíz, backend y frontend;
+contra un proyecto de **Supabase propio de producción** (base, Auth y Storage),
+**separado del de desarrollo**. Antes del primer deploy hay que crearlo, correr
+`prisma migrate deploy` contra él y cargar el seed (`npm run seed --workspace=apps/backend`),
+y crear el bucket privado `card-attachments` de Storage. Node **>= 22.12** en todo (`engines` en la raíz, backend y frontend;
 la imagen del backend es `node:22`).
 
 ## Por qué el backend NO va en una plataforma que duerme
@@ -68,8 +70,8 @@ día queda sin foto para siempre (un hueco visible a propósito, no se inventa).
 
 - Authentication → URL Configuration: **Site URL** = el dominio de Vercel, y
   agregarlo a *Redirect URLs* (lo usa el restablecer contraseña).
-- La base ya tiene el seed cargado y las migraciones aplicadas: no hay que
-  sembrar de nuevo. (Dev y producción comparten esta base.)
+- El proyecto de producción arranca vacío: migraciones + seed + bucket (ver arriba).
+  Dev y producción NO comparten base.
 
 ## 4. Verificación después del deploy
 
