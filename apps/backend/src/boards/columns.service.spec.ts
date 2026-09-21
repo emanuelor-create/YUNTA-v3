@@ -38,7 +38,7 @@ describe('ColumnsService', () => {
       delete: jest.Mock;
       findUniqueOrThrow: jest.Mock;
     };
-    card: { updateMany: jest.Mock };
+    card: { updateMany: jest.Mock; findMany: jest.Mock };
   };
   let activityLog: { log: jest.Mock };
   let service: ColumnsService;
@@ -58,7 +58,8 @@ describe('ColumnsService', () => {
         findUniqueOrThrow: jest.fn(),
       },
       // { count } como devuelve Prisma: reabiertas primero, cerradas después.
-      card: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      // findMany: los contenedores del tablero (ninguno en estos casos).
+      card: { updateMany: jest.fn().mockResolvedValue({ count: 0 }), findMany: jest.fn().mockResolvedValue([]) },
     };
     prisma.$transaction.mockImplementation((cb: (t: typeof tx) => unknown) => cb(tx));
     activityLog = { log: jest.fn() };

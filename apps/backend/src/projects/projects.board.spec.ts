@@ -14,6 +14,8 @@ const card = (id: string, number: number, over: Record<string, unknown> = {}) =>
   completedAt: null,
   storyPoints: null,
   assignees: [],
+  parent: null,
+  children: [],
   ...over,
 });
 
@@ -81,6 +83,35 @@ describe('ProjectsService.getBoard', () => {
     expect(columns[1].cards[0].dueState).toBe('soon'); // en 3 días
     expect(columns[2].cards[0].dueState).toBeNull(); // hecha, aunque su fecha ya pasó
     expect(columns[2].cards[0].completed).toBe(true);
+  });
+
+  it('una hoja no trae parentCode ni subtareas; una subtarea trae el código de su madre; un contenedor cuenta sus hijas', async () => {
+    prisma.project.findUnique.mockResolvedValue(
+      project({
+        board: {
+          id: 'board-1',
+          columns: [
+            {
+              id: 'c0',
+              name: 'Por hacer',
+              cards: [
+                card('hoja', 1),
+                card('hija', 2, { parent: { number: 4 } }),
+                card('madre', 4, {
+                  children: [{ completedAt: new Date() }, { completedAt: null }, { completedAt: null }],
+                }),
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    const [hoja, hija, madre] = (await service.getBoard('proj-1', 'u1')).columns[0].cards;
+
+    expect(hoja).toMatchObject({ parentCode: null, subtasks: null });
+    expect(hija).toMatchObject({ parentCode: 'RED-4', subtasks: null });
+    expect(madre).toMatchObject({ code: 'RED-4', parentCode: null, subtasks: { total: 3, done: 1 } });
   });
 
   it('canEdit / canManage según el rol: OWNER todo, EDITOR mueve pero no toca columnas, VIEWER solo mira', async () => {

@@ -1,9 +1,10 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Card, CardPriority, Column, Prisma } from '@prisma/client';
 import { ActivityLogService } from '../activity/activity-log.service';
 import { projectAccess } from '../auth/project-access';
 import { cardCode } from '../projects/project-key';
 import { dueState } from './card-metrics';
+import { syncContainer } from './container-rollup';
 import { PrismaService } from '../prisma/prisma.service';
 
 const STORY_POINTS_SCALE = [1, 2, 3, 5, 8, 13] as const;
@@ -13,6 +14,7 @@ const PRIORITY_LABEL: Record<CardPriority, string> = { ALTA: 'Alta', MEDIA: 'Med
 
 const MAX_TITLE_LENGTH = 200;
 const MAX_EFFORT_NOTE_LENGTH = 500;
+const MAX_SUBTASKS = 12;
 
 const points = (n: number) => `${n} ${n === 1 ? 'punto' : 'puntos'}`;
 
@@ -46,9 +48,25 @@ export interface CardDetail {
   /// Para el selector de asignados: los miembros del proyecto.
   members: { id: string; name: string }[];
   canEdit: boolean;
+  /// Tiene subtareas: es un contenedor (sin esfuerzo, prioridad ni avance propios).
+  isContainer: boolean;
+  /// Si es una subtarea, de quién.
+  parent: { id: string; code: string; title: string } | null;
+  subtasks: {
+    id: string;
+    code: string;
+    title: string;
+    progress: number;
+    completed: boolean;
+    storyPoints: number | null;
+    column: string;
+    assignees: { id: string; name: string }[];
+  }[];
+  /// Se puede dividir: hoja de primer nivel, abierta, y quien mira puede editar.
+  canDivide: boolean;
 }
 
-type CardWithColumn = Prisma.CardGetPayload<{ include: { column: { include: { board: true } } } }>;
+type CardWithColumn = Prisma.CardGetPayload<{ include: { column: { include: { board: true } }; _count: { select: { children: true } } } }>;
 
 @Injectable()
 export class CardsService {
@@ -68,6 +86,7 @@ export class CardsService {
   /// renumera completa, en la misma transacción que el cambio de estado.
   async move(cardId: string, columnId: string, actorId: string, position?: number): Promise<Card> {
     const card = await this.getCardOrThrow(cardId);
+    this.assertNotContainer(card, 'movelas a ellas, la tarjeta se ubica sola según la subtarea más atrasada.');
     const columns = await this.getOrderedColumns(card.column.boardId);
     const targetColumn = columns.find((column) => column.id === columnId);
     if (!targetColumn) {
@@ -79,6 +98,8 @@ export class CardsService {
     const lastColumn = columns[columns.length - 1];
     const sameColumn = card.columnId === columnId;
 
+    // leaf-ok: ordena TODAS las tarjetas de la columna (los contenedores también
+    // ocupan una posición y se renumeran con las demás), no cuenta trabajo.
     const orderedIds = async (id: string) =>
       (await this.prisma.card.findMany({ where: { columnId: id }, orderBy: { position: 'asc' }, select: { id: true } })).map(
         (row) => row.id,
@@ -121,6 +142,8 @@ export class CardsService {
         await tx.card.updateMany({ where: { columnId: card.columnId }, data: { position: { increment: SHIFT } } });
         await this.renumber(tx, sourceRemaining);
       }
+      // Si es una subtarea, el contenedor se vuelve a derivar acá mismo.
+      if (card.parentId) await syncContainer(tx, card.parentId);
       return tx.card.findUniqueOrThrow({ where: { id: cardId } });
     });
 
@@ -178,6 +201,7 @@ export class CardsService {
         data: { nextCardNumber: { increment: 1 } },
         select: { nextCardNumber: true },
       });
+      // leaf-ok: calcula la próxima posición de orden en la columna, no cuenta trabajo.
       const last = await tx.card.aggregate({ where: { columnId: column.id }, _max: { position: true } });
       return tx.card.create({
         data: {
@@ -258,6 +282,20 @@ export class CardsService {
     const card = await this.prisma.card.findUnique({
       where: { id: cardId },
       include: {
+        parent: { select: { id: true, number: true, title: true } },
+        children: {
+          orderBy: { number: 'asc' },
+          select: {
+            id: true,
+            number: true,
+            title: true,
+            progress: true,
+            completedAt: true,
+            storyPoints: true,
+            column: { select: { name: true } },
+            assignees: { orderBy: { createdAt: 'asc' }, select: { user: { select: { id: true, name: true } } } },
+          },
+        },
         assignees: { include: { user: { select: { id: true, name: true } } }, orderBy: { createdAt: 'asc' } },
         column: {
           include: {
@@ -303,34 +341,53 @@ export class CardsService {
       assignees: card.assignees.map((a) => a.user),
       members: members.map((m) => m.user),
       canEdit: access.canEdit,
+      isContainer: (card.children?.length ?? 0) > 0,
+      parent: card.parent ? { id: card.parent.id, code: cardCode(project.key, card.parent.number), title: card.parent.title } : null,
+      subtasks: (card.children ?? []).map((child) => ({
+        id: child.id,
+        code: cardCode(project.key, child.number),
+        title: child.title,
+        progress: child.progress,
+        completed: child.completedAt !== null,
+        storyPoints: child.storyPoints,
+        column: child.column.name,
+        assignees: child.assignees.map((a) => a.user),
+      })),
+      canDivide: access.canEdit && !card.parentId && !(card.children?.length ?? 0) && card.completedAt === null,
     };
   }
 
   async updateProgress(cardId: string, progress: number, actorId: string): Promise<Card> {
     this.assertProgress(progress);
     const card = await this.getCardOrThrow(cardId);
+    this.assertNotContainer(card, 'el avance se calcula del de sus subtareas.');
     const columns = await this.getOrderedColumns(card.column.boardId);
     const lastColumn = columns[columns.length - 1];
     const isInLastColumn = card.columnId === lastColumn.id;
 
-    let updated: Card;
-    if (progress === 100) {
-      updated = await this.prisma.card.update({
-        where: { id: cardId },
-        data: { progress: 100, completedAt: new Date(), columnId: lastColumn.id },
-      });
-    } else if (isInLastColumn) {
-      const penultimateColumn = columns[columns.length - 2] ?? lastColumn;
-      updated = await this.prisma.card.update({
-        where: { id: cardId },
-        data: { progress, completedAt: null, columnId: penultimateColumn.id },
-      });
-    } else {
-      updated = await this.prisma.card.update({
-        where: { id: cardId },
-        data: { progress, completedAt: null },
-      });
-    }
+    // En una transacción: si es una subtarea, su contenedor se re-deriva con ella.
+    const updated = await this.prisma.$transaction(async (tx) => {
+      let result: Card;
+      if (progress === 100) {
+        result = await tx.card.update({
+          where: { id: cardId },
+          data: { progress: 100, completedAt: new Date(), columnId: lastColumn.id },
+        });
+      } else if (isInLastColumn) {
+        const penultimateColumn = columns[columns.length - 2] ?? lastColumn;
+        result = await tx.card.update({
+          where: { id: cardId },
+          data: { progress, completedAt: null, columnId: penultimateColumn.id },
+        });
+      } else {
+        result = await tx.card.update({
+          where: { id: cardId },
+          data: { progress, completedAt: null },
+        });
+      }
+      if (card.parentId) await syncContainer(tx, card.parentId);
+      return result;
+    });
 
     await this.activityLog.log({
       projectId: card.column.board.projectId,
@@ -359,6 +416,7 @@ export class CardsService {
   ): Promise<Card> {
     this.assertStoryPoints(storyPoints);
     const card = await this.getCardOrThrow(cardId);
+    this.assertNotContainer(card, 'no tiene esfuerzo propio, el esfuerzo está en sus subtareas.');
 
     let effortNote: string | null;
     if (storyPoints !== 13) {
@@ -400,12 +458,130 @@ export class CardsService {
     return updated;
   }
 
+  /// Divide una tarjeta en subtareas. Las hijas son tarjetas completas (código,
+  /// esfuerzo, avance y asignados propios) que nacen en la primera columna, con
+  /// la prioridad, la fecha y los asignados de la original. La original pasa a ser
+  /// un CONTENEDOR: pierde lo propio (esfuerzo —el 13 "fue reemplazado"—,
+  /// prioridad, asignados y fecha, que ahora viven en las hijas) y su avance y
+  /// columna se derivan de ellas. Así nada cuenta dos veces: solo cuentan las hojas.
+  ///
+  /// Un solo nivel: una subtarea no se divide. Una tarjeta cerrada tampoco (al
+  /// dividirla nacerían hijas abiertas y la reabrirían sin que nadie lo decida).
+  async divide(
+    cardId: string,
+    input: { subtasks?: unknown },
+    actorId: string,
+  ): Promise<{ id: string; subtasks: { id: string; code: string; title: string }[] }> {
+    const items = input?.subtasks;
+    if (!Array.isArray(items) || items.length < 2) {
+      throw new BadRequestException('Dividir necesita al menos dos subtareas');
+    }
+    if (items.length > MAX_SUBTASKS) {
+      throw new BadRequestException(`No se puede dividir en más de ${MAX_SUBTASKS} subtareas de una vez`);
+    }
+    const subtasks = items.map((item: { title?: unknown; storyPoints?: unknown }, index) => {
+      const title = typeof item?.title === 'string' ? item.title.trim() : '';
+      if (!title) throw new BadRequestException(`La subtarea ${index + 1} necesita un título`);
+      if (title.length > MAX_TITLE_LENGTH) {
+        throw new BadRequestException(`El título de la subtarea ${index + 1} no puede pasar de ${MAX_TITLE_LENGTH} caracteres`);
+      }
+      const storyPoints = item.storyPoints === undefined ? null : item.storyPoints;
+      if (storyPoints !== null && typeof storyPoints !== 'number') {
+        throw new BadRequestException(`storyPoints de la subtarea ${index + 1} inválido`);
+      }
+      this.assertStoryPoints(storyPoints);
+      return { title, storyPoints };
+    });
+
+    const card = await this.prisma.card.findUnique({
+      where: { id: cardId },
+      include: {
+        assignees: { select: { userId: true } },
+        _count: { select: { children: true } },
+        column: {
+          include: {
+            board: { include: { project: { select: { key: true } }, columns: { orderBy: { position: 'asc' } } } },
+          },
+        },
+      },
+    });
+    if (!card) throw new NotFoundException(`Card ${cardId} no encontrada`);
+    if (card.parentId) throw new ConflictException('Una subtarea no se divide: las subtareas son de un solo nivel');
+    if ((card._count?.children ?? 0) > 0) throw new ConflictException('Esta tarjeta ya está dividida en subtareas');
+    if (card.completedAt !== null) throw new ConflictException('Una tarjeta cerrada no se divide: reabrila primero');
+
+    const board = card.column.board;
+    const first = board.columns[0];
+    const bornClosed = board.columns.length === 1; // primera = última: rige la misma regla que en `create`
+
+    const created = await this.prisma.$transaction(
+      async (tx) => {
+        const project = await tx.project.update({
+          where: { id: board.projectId },
+          data: { nextCardNumber: { increment: subtasks.length } },
+          select: { nextCardNumber: true },
+        });
+        const firstNumber = project.nextCardNumber - subtasks.length;
+        // leaf-ok: calcula la próxima posición de orden en la columna, no cuenta trabajo.
+        const last = await tx.card.aggregate({ where: { columnId: first.id }, _max: { position: true } });
+        const firstPosition = (last._max.position ?? -1) + 1;
+
+        const children: { id: string; number: number; title: string }[] = [];
+        for (const [index, subtask] of subtasks.entries()) {
+          children.push(
+            await tx.card.create({
+              data: {
+                columnId: first.id,
+                title: subtask.title,
+                number: firstNumber + index,
+                position: firstPosition + index,
+                storyPoints: subtask.storyPoints,
+                // Heredan lo que la original tenía: dividir no pierde prioridad,
+                // fecha ni a quién estaba asignada.
+                priority: card.priority,
+                dueDate: card.dueDate,
+                parentId: card.id,
+                assignees: { create: card.assignees.map((a) => ({ userId: a.userId })) },
+                ...(bornClosed ? { progress: 100, completedAt: new Date() } : {}),
+              },
+              select: { id: true, number: true, title: true },
+            }),
+          );
+        }
+
+        // La original deja de tener lo propio…
+        await tx.cardAssignee.deleteMany({ where: { cardId: card.id } });
+        await tx.card.update({
+          where: { id: card.id },
+          data: { storyPoints: null, effortNote: null, priority: null, dueDate: null },
+        });
+        // …y su avance y columna pasan a derivarse de las hijas.
+        await syncContainer(tx, card.id);
+        return children;
+      },
+      // N altas + la derivación contra una base remota: más que el default de 5 s.
+      { timeout: 20_000 },
+    );
+
+    const codes = created.map((child) => cardCode(board.project.key, child.number));
+    await this.activityLog.log({
+      projectId: board.projectId,
+      userId: actorId,
+      type: 'CARD_UPDATED',
+      message: `dividió la tarjeta en ${created.length} subtareas (${codes.join(', ')})`,
+      cardId: card.id,
+      cardTitle: card.title,
+    });
+    return { id: card.id, subtasks: created.map((child, i) => ({ id: child.id, code: codes[i], title: child.title })) };
+  }
+
   /// Prioridad: ALTA / MEDIA / BAJA, o null (sin clasificar — un estado
   /// legítimo, no hay default). Idempotente: poner la que ya tiene no toca la
   /// tarjeta ni ensucia la actividad.
   async updatePriority(cardId: string, priority: CardPriority | null, actorId: string): Promise<Card> {
     this.assertPriority(priority);
     const card = await this.getCardOrThrow(cardId);
+    this.assertNotContainer(card, 'no tiene prioridad propia, la tienen sus subtareas.');
     if (card.priority === priority) return card;
 
     const updated = await this.prisma.card.update({ where: { id: cardId }, data: { priority } });
@@ -432,6 +608,7 @@ export class CardsService {
   /// rompe nada, es como ya estaba.
   async addAssignee(cardId: string, userId: string, actorId: string): Promise<void> {
     const card = await this.getCardOrThrow(cardId);
+    this.assertNotContainer(card, 'no tiene asignados propios, asigná a sus subtareas.');
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user || user.deletedAt) {
       throw new NotFoundException(`User ${userId} no encontrado`);
@@ -454,6 +631,7 @@ export class CardsService {
 
   async removeAssignee(cardId: string, userId: string, actorId: string): Promise<void> {
     const card = await this.getCardOrThrow(cardId);
+    this.assertNotContainer(card, 'no tiene asignados propios, quitá a la persona de sus subtareas.');
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     await this.prisma.cardAssignee.deleteMany({ where: { cardId, userId } });
 
@@ -496,12 +674,21 @@ export class CardsService {
   private async getCardOrThrow(cardId: string): Promise<CardWithColumn> {
     const card = await this.prisma.card.findUnique({
       where: { id: cardId },
-      include: { column: { include: { board: true } } },
+      include: { column: { include: { board: true } }, _count: { select: { children: true } } },
     });
     if (!card) {
       throw new NotFoundException(`Card ${cardId} no encontrada`);
     }
     return card;
+  }
+
+  /// Un contenedor (tarjeta dividida) no tiene esfuerzo, prioridad, asignados ni
+  /// avance propios, y se mueve solo según sus hijas: tocarlos directamente
+  /// abriría una segunda verdad al lado de la derivada.
+  private assertNotContainer(card: CardWithColumn, message: string): void {
+    if ((card._count?.children ?? 0) > 0) {
+      throw new BadRequestException(`Esta tarjeta está dividida en subtareas: ${message}`);
+    }
   }
 
   private async getOrderedColumns(boardId: string): Promise<Column[]> {

@@ -12,7 +12,7 @@
      · features/clients/types.ts ............ PROJECT_MEMBER_ROLE_LABELS y _HINTS
    Ver "Qué reemplaza cada primitiva" en HANDOFF.md.                      */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 const px = (n: number) => `${n}px`;
@@ -337,6 +337,8 @@ export function Toggle({ on, onChange, title }: { on: boolean; onChange: (v: boo
 
 /* ── Modal ────────────────────────────────────────────────────────────── */
 
+const modalStack: object[] = [];
+
 export function Modal({
   title,
   kicker,
@@ -356,11 +358,21 @@ export function Modal({
   children: ReactNode;
 }) {
   // Escape cierra el modal (todos: configuración, nuevo proyecto, detalle de tarjeta).
+  // Con modales apilados (la división sobre el detalle) cierra solo el de arriba.
+  // `onClose` va por ref: el efecto se monta una vez, y un re-render del modal de
+  // abajo no lo vuelve a poner arriba de la pila.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    const token = {};
+    modalStack.push(token);
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && modalStack[modalStack.length - 1] === token && onCloseRef.current();
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      modalStack.splice(modalStack.indexOf(token), 1);
+    };
+  }, []);
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 40 }}>

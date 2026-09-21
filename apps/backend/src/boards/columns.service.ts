@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Column, Prisma } from '@prisma/client';
 import { ActivityLogService } from '../activity/activity-log.service';
+import { syncBoardContainers } from '../cards/container-rollup';
 import { PrismaService } from '../prisma/prisma.service';
 
 interface UpdateColumnInput {
@@ -26,7 +27,11 @@ export class ColumnsService {
     // misma transacción que el alta.
     const column = await this.prisma.$transaction(async (tx) => {
       const created = await tx.column.create({ data: { boardId, name, position: nextPosition } });
-      if (columns.length) await this.reconcileCompletion(tx, boardId, created.id);
+      if (columns.length) {
+        await this.reconcileCompletion(tx, boardId, created.id);
+        // Las hijas pudieron reabrirse: los contenedores se vuelven a derivar.
+        await syncBoardContainers(tx, boardId);
+      }
       return created;
     });
 
@@ -82,6 +87,7 @@ export class ColumnsService {
       // dentro de ella) es la ambigüedad que el modelo no admite.
       const reconciled =
         oldLastId !== newLastId ? await this.reconcileCompletion(tx, boardId, newLastId) : null;
+      if (reconciled) await syncBoardContainers(tx, boardId);
 
       return { updated: await tx.column.findUniqueOrThrow({ where: { id: columnId } }), reconciled };
     });
@@ -131,6 +137,7 @@ export class ColumnsService {
       // de dos, la primera pasa a ser la última y recibe las tarjetas movidas;
       // y al borrar la última, la anteúltima hereda el rol de "hecho".
       await this.reconcileCompletion(tx, boardId, newLast.id);
+      await syncBoardContainers(tx, boardId);
     });
 
     await this.activityLog.log({

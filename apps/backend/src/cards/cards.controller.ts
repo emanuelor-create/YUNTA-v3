@@ -80,6 +80,13 @@ export class CardsController {
     return this.cards.updateProgress(id, body.progress, request.auth.userId);
   }
 
+  /// Divide una tarjeta en subtareas (mínimo dos). La original pasa a contenedor.
+  @Post(':id/divide')
+  @ProjectRoles(ProjectRole.OWNER, ProjectRole.EDITOR)
+  divide(@Param('id') id: string, @Body() body: { subtasks?: unknown }, @Req() request: AuthenticatedRequest) {
+    return this.cards.divide(id, body ?? {}, request.auth.userId);
+  }
+
   @Patch(':id/story-points')
   @ProjectRoles(ProjectRole.OWNER, ProjectRole.EDITOR)
   updateStoryPoints(@Param('id') id: string, @Body() body: UpdateStoryPointsBody, @Req() request: AuthenticatedRequest) {

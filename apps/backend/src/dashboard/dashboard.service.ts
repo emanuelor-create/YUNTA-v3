@@ -6,6 +6,7 @@ import {
   isCompletedSince,
   isDueSoon,
   isOverdue,
+  LEAF,
   tallyOpenAssignments,
 } from '../cards/card-metrics';
 import { PrismaService } from '../prisma/prisma.service';
@@ -108,7 +109,7 @@ export class DashboardService {
     const [cards, myAssignments, members] = await Promise.all([
       projectIds.length
         ? this.prisma.card.findMany({
-            where: { column: { board: { projectId: { in: projectIds } } } },
+            where: { column: { board: { projectId: { in: projectIds } } }, ...LEAF },
             select: {
               id: true,
               title: true,
@@ -129,6 +130,7 @@ export class DashboardService {
         where: {
           userId,
           card: {
+            ...LEAF,
             OR: [
               { completedAt: null },
               { completedAt: { gte: previousSince } },
@@ -232,7 +234,7 @@ export class DashboardService {
     const teamUsers = new Map(members.map((m) => [m.user.id, m.user.name]));
     const openAssignments = teamUsers.size
       ? await this.prisma.cardAssignee.findMany({
-          where: { userId: { in: [...teamUsers.keys()] }, card: { completedAt: null } },
+          where: { userId: { in: [...teamUsers.keys()] }, card: { completedAt: null, ...LEAF } },
           select: { userId: true, card: { select: { dueDate: true } } },
         })
       : [];

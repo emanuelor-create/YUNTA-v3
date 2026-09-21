@@ -7,6 +7,7 @@ import { formatFullDate } from '../../lib/formatRelativeTime';
 import { AttachmentsSection } from './AttachmentsSection';
 import { CommentsSection } from './CommentsSection';
 import { EffortProgressSection } from './EffortProgressSection';
+import { SubtasksSection } from './SubtasksSection';
 import { CardPriority, PRIORITY_LABEL } from './priority';
 import { useAssignees, useCardDetail, useMoveCard, useSetPriority, useUpdateCard } from './useBoard';
 
@@ -27,7 +28,7 @@ const PRIORITY_OPTIONS: (CardPriority | '')[] = ['', 'ALTA', 'MEDIA', 'BAJA'];
 /// Shell del detalle de tarjeta con lo que ya tiene backend: título, código,
 /// estado, prioridad, asignados, descripción, esfuerzo, avance, adjuntos y
 /// comentarios. Falta (a propósito): editar la fecha de entrega.
-export function CardDetailModal({ cardId, onClose }: { cardId: string; onClose: () => void }) {
+export function CardDetailModal({ cardId, onClose, onOpenCard }: { cardId: string; onClose: () => void; onOpenCard: (cardId: string) => void }) {
   const { data: card, isLoading, isError } = useCardDetail(cardId);
 
   if (isLoading || isError || !card) {
@@ -37,10 +38,10 @@ export function CardDetailModal({ cardId, onClose }: { cardId: string; onClose: 
       </Modal>
     );
   }
-  return <DetailBody card={card} onClose={onClose} />;
+  return <DetailBody card={card} onClose={onClose} onOpenCard={onOpenCard} />;
 }
 
-function DetailBody({ card, onClose }: { card: NonNullable<ReturnType<typeof useCardDetail>['data']>; onClose: () => void }) {
+function DetailBody({ card, onClose, onOpenCard }: { card: NonNullable<ReturnType<typeof useCardDetail>['data']>; onClose: () => void; onOpenCard: (cardId: string) => void }) {
   const update = useUpdateCard(card.id);
   const setPriority = useSetPriority(card.id);
   const assignees = useAssignees(card.id);
@@ -88,6 +89,17 @@ function DetailBody({ card, onClose }: { card: NonNullable<ReturnType<typeof use
               <span style={{ width: 8, height: 8, borderRadius: 2, background: card.project.color }} />
               {card.project.name}
               <span style={{ fontFamily: 'var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace)', letterSpacing: '0.02em', color: 'var(--ink-2)' }}>· {card.code}</span>
+              {card.parent && (
+                <button
+                  type="button"
+                  data-parent-link
+                  onClick={() => onOpenCard(card.parent!.id)}
+                  title={card.parent.title}
+                  style={{ fontFamily: 'var(--sans)', fontSize: 12.5, color: 'var(--accent-ink)', background: 'transparent', border: 0, padding: 0, cursor: 'pointer', textDecoration: 'underline' }}
+                >
+                  subtarea de {card.parent.code}
+                </button>
+              )}
             </span>
             <textarea
               ref={titleRef}
@@ -126,7 +138,7 @@ function DetailBody({ card, onClose }: { card: NonNullable<ReturnType<typeof use
             style={{ ...FIELD, resize: 'vertical', lineHeight: 1.5 }}
           />
           <div style={{ marginTop: 10 }}>
-            <EffortProgressSection card={card} readOnly={readOnly} />
+            {card.isContainer ? <SubtasksSection card={card} onOpen={onOpenCard} /> : <EffortProgressSection card={card} readOnly={readOnly} />}
           </div>
           <AttachmentsSection cardId={card.id} readOnly={readOnly} />
         </div>
@@ -135,7 +147,7 @@ function DetailBody({ card, onClose }: { card: NonNullable<ReturnType<typeof use
           <Field label="Estado">
             <select
               value={card.column.id}
-              disabled={readOnly || move.isPending}
+              disabled={readOnly || move.isPending || card.isContainer}
               onChange={(event) => move.mutate({ cardId: card.id, columnId: event.target.value })}
               style={FIELD}
             >
@@ -147,6 +159,13 @@ function DetailBody({ card, onClose }: { card: NonNullable<ReturnType<typeof use
             </select>
           </Field>
 
+          {card.isContainer && (
+            <span style={{ fontSize: 12.5, lineHeight: 1.45, color: 'var(--ink-3)', marginTop: -10 }}>
+              Derivado de las subtareas: la columna de la más atrasada, o «{card.columns[card.columns.length - 1].name}» si están todas hechas.
+            </span>
+          )}
+
+          {!card.isContainer && (
           <Field label="Prioridad">
             <select
               value={card.priority ?? ''}
@@ -161,7 +180,9 @@ function DetailBody({ card, onClose }: { card: NonNullable<ReturnType<typeof use
               ))}
             </select>
           </Field>
+          )}
 
+          {!card.isContainer && (
           <Field label="Asignados">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {card.assignees.length === 0 && <span style={{ fontSize: 13, color: 'var(--ink-4)' }}>Nadie asignado.</span>}
@@ -198,7 +219,9 @@ function DetailBody({ card, onClose }: { card: NonNullable<ReturnType<typeof use
               )}
             </div>
           </Field>
+          )}
 
+          {!card.isContainer && (
           <Field label="Entrega">
             <span style={{ fontSize: 13.5, color: card.dueState === 'overdue' ? 'var(--accent-ink)' : 'var(--ink)' }}>
               {card.dueDate ? formatFullDate(card.dueDate) : 'Sin fecha'}
@@ -206,6 +229,7 @@ function DetailBody({ card, onClose }: { card: NonNullable<ReturnType<typeof use
               {card.dueState === 'soon' && ' · vence pronto'}
             </span>
           </Field>
+          )}
 
           <Field label="Creada">
             <span style={{ fontSize: 13.5, color: 'var(--ink-2)' }}>{formatFullDate(card.createdAt)}</span>

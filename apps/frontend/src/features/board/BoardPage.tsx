@@ -50,7 +50,7 @@ function BoardBody({ projectId }: { projectId: string }) {
         }}
         onOpenCard={setOpenCard}
       />
-      {openCardId && <CardDetailModal cardId={openCardId} onClose={() => setOpenCard(null)} />}
+      {openCardId && <CardDetailModal cardId={openCardId} onClose={() => setOpenCard(null)} onOpenCard={setOpenCard} />}
     </>
   );
 }
@@ -313,13 +313,15 @@ function CardTile({
   onOpen: () => void;
 }) {
   const [hover, setHover] = useState(false);
+  const container = card.subtasks !== null;
   const shown = card.assignees.slice(0, 3);
   const extra = card.assignees.length - shown.length;
 
   return (
     <article
       data-card-id={card.id}
-      draggable={draggable}
+      draggable={draggable && !container}
+      data-container={container ? '' : undefined}
       onDragStart={(event) => {
         event.dataTransfer.setData('text/plain', card.id);
         event.dataTransfer.effectAllowed = 'move';
@@ -337,17 +339,26 @@ function CardTile({
         background: 'var(--field)',
         border: `1px solid ${hover ? 'var(--line-strong)' : 'var(--line)'}`,
         borderRadius: 10,
-        cursor: draggable ? 'grab' : 'pointer',
+        cursor: draggable && !container ? 'grab' : 'pointer',
         opacity: dragged ? 0.35 : 1,
       }}
     >
       <span style={{ fontFamily: 'var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace)', fontSize: 11.5, color: 'var(--ink-3)', letterSpacing: '0.02em' }}>
         {card.code}
+        {card.parentCode && <span title={`Subtarea de ${card.parentCode}`}> · de {card.parentCode}</span>}
       </span>
       <span title={card.title} style={{ ...CLAMP_3, fontSize: 13.5, fontWeight: 500, lineHeight: 1.35, color: card.completed ? 'var(--ink-3)' : 'var(--ink)' }}>
         {card.title}
       </span>
-      {(showsPriorityBadge(card.priority) || card.dueState || shown.length > 0) && (
+      {container && (
+        <span
+          data-container-summary
+          style={{ alignSelf: 'flex-start', fontSize: 11.5, fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-tick)', background: 'var(--neutral-soft)', color: 'var(--ink-2)' }}
+        >
+          {card.subtasks!.total} subtareas · {card.subtasks!.done} {card.subtasks!.done === 1 ? 'hecha' : 'hechas'}
+        </span>
+      )}
+      {!container && (showsPriorityBadge(card.priority) || card.dueState || shown.length > 0) && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 22 }}>
           <CardPriorityBadge priority={card.priority} />
           {card.dueState && card.dueDate && <DueChip state={card.dueState} iso={card.dueDate} />}

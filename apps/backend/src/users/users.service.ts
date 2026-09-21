@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, ProjectRole, User, UserRole, UserStatus } from '@prisma/client';
-import { tallyOpenAssignments } from '../cards/card-metrics';
+import { LEAF, tallyOpenAssignments } from '../cards/card-metrics';
 import { PrismaService } from '../prisma/prisma.service';
 import { SupabaseAdminService } from '../supabase/supabase-admin.service';
 
@@ -95,7 +95,7 @@ export class UsersService {
         : [],
       userIds.length
         ? this.prisma.cardAssignee.findMany({
-            where: { userId: { in: userIds }, card: { completedAt: null } },
+            where: { userId: { in: userIds }, card: { completedAt: null, ...LEAF } },
             select: { userId: true, card: { select: { dueDate: true } } },
           })
         : [],

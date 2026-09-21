@@ -3,6 +3,14 @@
 /// para que un mismo número no pueda calcularse de dos maneras: si una
 /// pantalla dice "vencen pronto" o "cerradas en 7 días", es esta definición.
 
+/// SOLO CUENTAN LAS HOJAS. Una tarjeta con subtareas es un contenedor y no entra
+/// en ninguna métrica —ni puntos, ni avance, ni conteos, ni carga—: cuentan sus
+/// hijas. Una tarjeta sin hijas es una hoja, así que sin subtareas nada cambia.
+/// Es el filtro que llevan TODAS las consultas que cuentan tarjetas (proyecto,
+/// stats, Dashboard, Usuarios, snapshots): una consulta nueva que cuente
+/// tarjetas y no lo incluya duplica el trabajo de cada tarjeta dividida.
+export const LEAF = { children: { none: {} } } as const;
+
 export const DAY_MS = 24 * 60 * 60 * 1000;
 export const DUE_SOON_HORIZON_DAYS = 7;
 

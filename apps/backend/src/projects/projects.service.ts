@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Column } from '@prisma/client';
 import { projectAccess } from '../auth/project-access';
-import { DAY_MS, dueState, isCompletedSince, isDueSoon } from '../cards/card-metrics';
+import { DAY_MS, dueState, isCompletedSince, isDueSoon, LEAF } from '../cards/card-metrics';
 import { PrismaService } from '../prisma/prisma.service';
 import { cardCode } from './project-key';
 
@@ -38,6 +38,12 @@ export interface BoardCard {
   completed: boolean;
   storyPoints: number | null;
   assignees: { id: string; name: string }[];
+  /// Subtarea: el código de su tarjeta madre. Contenedor: null.
+  parentCode: string | null;
+  /// Contenedor: cuántas subtareas tiene y cuántas están hechas ("3 subtareas ·
+  /// 1 hecha"). null en una hoja. Un contenedor no muestra prioridad, esfuerzo,
+  /// asignados ni avance propios.
+  subtasks: { total: number; done: number } | null;
 }
 
 export interface BoardView {
@@ -123,7 +129,7 @@ export class ProjectsService {
       // Card no tiene projectId directo (Card → Column → Board → Project);
       // se agrega acá en vez de hacer una consulta por proyecto.
       this.prisma.card.findMany({
-        where: { column: { board: { projectId: { in: projectIds } } } },
+        where: { column: { board: { projectId: { in: projectIds } } }, ...LEAF },
         select: { completedAt: true, column: { select: { board: { select: { projectId: true } } } } },
       }),
     ]);
@@ -187,7 +193,7 @@ export class ProjectsService {
         orderBy: { createdAt: 'asc' },
       }),
       this.prisma.card.findMany({
-        where: { column: { board: { projectId } } },
+        where: { column: { board: { projectId } }, ...LEAF },
         select: { completedAt: true, assignees: { select: { userId: true } } },
       }),
     ]);
@@ -256,6 +262,8 @@ export class ProjectsService {
                     dueDate: true,
                     completedAt: true,
                     storyPoints: true,
+                    parent: { select: { number: true } },
+                    children: { select: { completedAt: true } },
                     assignees: { orderBy: { createdAt: 'asc' }, select: { user: { select: { id: true, name: true } } } },
                   },
                 },
@@ -292,6 +300,10 @@ export class ProjectsService {
           completed: card.completedAt !== null,
           storyPoints: card.storyPoints,
           assignees: card.assignees.map((a) => a.user),
+          parentCode: card.parent ? cardCode(project.key, card.parent.number) : null,
+          subtasks: card.children.length
+            ? { total: card.children.length, done: card.children.filter((c) => c.completedAt !== null).length }
+            : null,
         })),
       })),
     };
@@ -327,7 +339,7 @@ export class ProjectsService {
 
     const cards: CardStatsRow[] = columnIds.length
       ? await this.prisma.card.findMany({
-          where: { columnId: { in: columnIds } },
+          where: { columnId: { in: columnIds }, ...LEAF },
           select: {
             columnId: true,
             progress: true,

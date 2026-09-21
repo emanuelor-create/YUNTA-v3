@@ -119,7 +119,9 @@ describe('SnapshotsService.capture', () => {
     await service.capture(MIDNIGHT_21);
     expect(prisma.project.findMany).toHaveBeenCalledWith({ where: { archivedAt: null }, select: { id: true } });
     expect(prisma.user.findMany).toHaveBeenCalledWith({ where: { deletedAt: null, status: 'ACTIVE' }, select: { id: true } });
-    expect(prisma.card.findMany.mock.calls[0][0].where).toEqual({ column: { board: { project: { archivedAt: null } } } });
+    // Solo hojas: un contenedor (tarjeta dividida) no se cuenta, sus hijas sí.
+    expect(prisma.card.findMany.mock.calls[0][0].where).toEqual({ column: { board: { project: { archivedAt: null } } }, children: { none: {} } });
+    expect(prisma.cardAssignee.findMany.mock.calls[0][0].where).toEqual({ card: { completedAt: null, children: { none: {} } } });
   });
 
   it('es idempotente: usa upsert por (proyecto, día) y (persona, día), nunca un create a secas', async () => {

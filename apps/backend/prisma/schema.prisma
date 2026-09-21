@@ -157,12 +157,24 @@ model Card {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// Subtarea de otra tarjeta (un solo nivel: una subtarea no se divide). Una
+  /// tarjeta con hijas es un CONTENEDOR y no entra en ninguna métrica — solo
+  /// cuentan las hojas (ver `LEAF` en cards/card-metrics.ts). Un contenedor no
+  /// tiene esfuerzo, prioridad, asignados ni fecha propios, y su avance y
+  /// columna se derivan de las hijas (cards/container-rollup.ts).
+  parentId String?
+
   column      Column           @relation(fields: [columnId], references: [id], onDelete: Cascade)
   assignees   CardAssignee[]
   attachments CardAttachment[]
   comments    Comment[]
+  /// SetNull, no Cascade: si un contenedor desaparece, sus hijas son trabajo
+  /// real y siguen existiendo como tarjetas normales.
+  parent      Card?            @relation("Subtasks", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Card[]           @relation("Subtasks")
 
   @@unique([columnId, position])
+  @@index([parentId])
 }
 
 /// Asignación de tarjeta a persona, muchos a muchos (README: "asignados"

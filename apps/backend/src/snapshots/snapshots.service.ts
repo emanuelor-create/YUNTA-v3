@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { isDueSoon, tallyOpenAssignments } from '../cards/card-metrics';
+import { isDueSoon, LEAF, tallyOpenAssignments } from '../cards/card-metrics';
 import { PrismaService } from '../prisma/prisma.service';
 import { closedDay, dateColumn, SNAPSHOT_TIME_ZONE } from './snapshot-dates';
 
@@ -37,12 +37,12 @@ export class SnapshotsService {
     const [projects, cards, users, openAssignments] = await Promise.all([
       this.prisma.project.findMany({ where: { archivedAt: null }, select: { id: true } }),
       this.prisma.card.findMany({
-        where: { column: { board: { project: { archivedAt: null } } } },
+        where: { column: { board: { project: { archivedAt: null } } }, ...LEAF },
         select: { completedAt: true, storyPoints: true, column: { select: { board: { select: { projectId: true } } } } },
       }),
       this.prisma.user.findMany({ where: { deletedAt: null, status: 'ACTIVE' }, select: { id: true } }),
       this.prisma.cardAssignee.findMany({
-        where: { card: { completedAt: null } },
+        where: { card: { completedAt: null, ...LEAF } },
         select: { userId: true, card: { select: { dueDate: true, completedAt: true } } },
       }),
     ]);

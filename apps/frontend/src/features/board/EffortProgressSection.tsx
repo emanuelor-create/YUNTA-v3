@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Button, Label } from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
 import { EFFORT_SCALE, effortLevel, examplesText, PROGRESS_STAGES, progressStage } from './effortProgress';
+import { DivideCardModal } from './DivideCardModal';
 import { CardDetail, useSetProgress, useSetStoryPoints } from './useBoard';
 
 /// "Esfuerzo y avance": los dos sectores de medición del detalle. Sin horas —
@@ -258,6 +259,7 @@ function SplitBlock({
   onJustify: (note: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const [dividing, setDividing] = useState(false);
   const [note, setNote] = useState(card.effortNote ?? '');
   useEffect(() => setNote(card.effortNote ?? ''), [card.effortNote]);
   const justified = !!card.effortNote;
@@ -319,9 +321,8 @@ function SplitBlock({
 
       {!editing && !readOnly && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {/* Inerte por ahora: necesita el modelo de subtareas (ver la nota en el pedido). */}
-          {!justified && (
-            <Button variant="ghost" disabled title="Próximamente: las subtareas todavía no existen">
+          {card.canDivide && (
+            <Button variant="ghost" onClick={() => setDividing(true)}>
               Dividir en subtareas
             </Button>
           )}
@@ -330,6 +331,7 @@ function SplitBlock({
           </Button>
         </div>
       )}
+      {dividing && <DivideCardModal card={card} onClose={() => setDividing(false)} />}
     </div>
   );
 }

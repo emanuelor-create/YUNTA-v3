@@ -14,6 +14,10 @@ export interface BoardCard {
   completed: boolean;
   storyPoints: number | null;
   assignees: { id: string; name: string }[];
+  /// Código de la tarjeta madre si esta es una subtarea; null si no.
+  parentCode: string | null;
+  /// Solo en un contenedor (tarjeta dividida): cuántas subtareas tiene y cuántas están hechas.
+  subtasks: { total: number; done: number } | null;
 }
 
 export interface BoardColumn {
@@ -53,6 +57,23 @@ export interface CardDetail {
   assignees: { id: string; name: string }[];
   members: { id: string; name: string }[];
   canEdit: boolean;
+  /// Dividida en subtareas: no tiene esfuerzo, prioridad, asignados ni avance propios;
+  /// su avance y su columna se derivan de las hijas.
+  isContainer: boolean;
+  /// Si es una subtarea, de quién.
+  parent: { id: string; code: string; title: string } | null;
+  subtasks: {
+    id: string;
+    code: string;
+    title: string;
+    progress: number;
+    completed: boolean;
+    storyPoints: number | null;
+    column: string;
+    assignees: { id: string; name: string }[];
+  }[];
+  /// Hoja abierta de primer nivel, y quien mira puede editar.
+  canDivide: boolean;
 }
 
 // Todo lo que cuelga de ['projects'] (tablero, detalle, stats, actividad, grilla)
@@ -194,6 +215,23 @@ export function useSetStoryPoints(cardId: string) {
   return useMutation({
     mutationFn: ({ storyPoints, note }: { storyPoints: number | null; note?: string | null }) =>
       apiFetch(`/cards/${cardId}/story-points`, { method: 'PATCH', body: JSON.stringify({ storyPoints, note }) }),
+    onSuccess: () => refreshAfterBoardChange(queryClient),
+  });
+}
+
+/// Divide la tarjeta en subtareas (mínimo 2, máximo MAX_SUBTASKS). La original
+/// pasa a ser un contenedor: deja de contar en las métricas y cuentan las hijas,
+/// así que se refresca todo (tablero, resumen, dashboard).
+export const MAX_SUBTASKS = 12;
+
+export function useDivideCard(cardId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (subtasks: { title: string; storyPoints: number | null }[]) =>
+      apiFetch<{ id: string; subtasks: { id: string; code: string; title: string }[] }>(`/cards/${cardId}/divide`, {
+        method: 'POST',
+        body: JSON.stringify({ subtasks }),
+      }),
     onSuccess: () => refreshAfterBoardChange(queryClient),
   });
 }
