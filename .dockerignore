@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+!**/.env.example
+.git
+apps/frontend
+design_handoff_yunta_ui
+**/*.log
