@@ -1,5 +1,20 @@
 # Deploy de YUNTA
 
+> **Configuración actual (oct 2026):** backend en **Render** (`render.yaml`, plan
+> free por ahora) y frontend en **GitHub Pages** (`.github/workflows/deploy-pages.yml`,
+> publica en la rama `gh-pages`). Railway no acepta cuentas nuevas por el momento.
+> Lo de abajo (Railway/Vercel) sigue valiendo como alternativa.
+>
+> - **Render:** New → Blueprint → este repo, rama `feat/yunta-v3-app`. Pide
+>   `DATABASE_URL`, `DIRECT_URL` y `SUPABASE_SERVICE_ROLE_KEY` (mismos valores que
+>   la tabla de Railway). La URL `https://….onrender.com` es la `VITE_API_URL`.
+>   En el plan free el servicio duerme a los 15 min: la foto diaria puede perderse.
+>   Para uso real, pasar a Starter.
+> - **GitHub Pages:** Settings → Pages → Branch `gh-pages` / (root). Variables en
+>   Settings → Secrets and variables → Actions → Variables: `VITE_API_URL`,
+>   `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`. Al cambiarlas, re-correr el workflow.
+>   Supabase → Redirect URLs: `https://emanuelor-create.github.io/YUNTA-v3/`.
+
 Backend (NestJS + Prisma) en **Railway**, frontend (React + Vite) en **Vercel**,
 contra un proyecto de **Supabase propio de producción** (base, Auth y Storage),
 **separado del de desarrollo**. Antes del primer deploy hay que crearlo, correr

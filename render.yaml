@@ -1,0 +1,37 @@
+# Backend de YUNTA en Render (Blueprint). En Render: New → Blueprint → este repo.
+# Construye con el Dockerfile de la raíz; el arranque corre `prisma migrate deploy`.
+#
+# Plan free: el servicio se duerme a los 15 min sin tráfico (la primera carga
+# tarda ~1 min) y la foto diaria de medianoche puede no correr. Para uso real,
+# pasar a "starter" (no duerme). Ver DEPLOY.md.
+services:
+  - type: web
+    name: yunta-backend
+    runtime: docker
+    plan: free
+    region: virginia
+    branch: feat/yunta-v3-app
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+    # Solo redeploya si cambia algo del backend (no por cambios del front).
+    buildFilter:
+      paths:
+        - apps/backend/**
+        - Dockerfile
+        - package.json
+        - package-lock.json
+    envVars:
+      # Secretas: Render las pide al crear el Blueprint (no van en el repo).
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      # Públicas.
+      - key: SUPABASE_URL
+        value: https://wixqctxwxubqmbukxvvc.supabase.co
+      - key: CORS_ORIGIN
+        value: https://emanuelor-create.github.io
