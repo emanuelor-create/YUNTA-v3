@@ -1,0 +1,57 @@
+# Publica el frontend en GitHub Pages: https://<usuario>.github.io/<repo>/
+# El backend NO va acá (Pages es solo estático): ver DEPLOY.md (Railway).
+name: Deploy frontend a GitHub Pages
+
+on:
+  push:
+    branches: [main, feat/yunta-v3-app]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Compilar frontend
+        run: npm run build:frontend
+        env:
+          VITE_BASE_PATH: /${{ github.event.repository.name }}/
+          # Settings → Secrets and variables → Actions → pestaña "Variables"
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+
+      # Pages no tiene rewrites: con 404.html = index.html, recargar
+      # /proyectos/... sigue cargando la app en vez de dar error.
+      - run: cp apps/frontend/dist/index.html apps/frontend/dist/404.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/frontend/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
