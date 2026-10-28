@@ -1,4 +1,6 @@
 # Publica el frontend en GitHub Pages: https://<usuario>.github.io/<repo>/
+# Compila la app y deja el resultado (con su index.html) en la rama gh-pages.
+# En Settings → Pages: Source "Deploy from a branch", Branch "gh-pages" / (root).
 # El backend NO va acá (Pages es solo estático): ver DEPLOY.md (Railway).
 name: Deploy frontend a GitHub Pages
 
@@ -8,16 +10,14 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,19 +39,19 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
 
       # Pages no tiene rewrites: con 404.html = index.html, recargar
-      # /proyectos/... sigue cargando la app en vez de dar error.
-      - run: cp apps/frontend/dist/index.html apps/frontend/dist/404.html
+      # /projects/... sigue cargando la app en vez de dar error.
+      # .nojekyll: que Pages sirva los archivos tal cual, sin procesarlos.
+      - name: Preparar sitio
+        run: |
+          cp apps/frontend/dist/index.html apps/frontend/dist/404.html
+          touch apps/frontend/dist/.nojekyll
 
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: apps/frontend/dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Publicar en la rama gh-pages
+        working-directory: apps/frontend/dist
+        run: |
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Deploy ${GITHUB_SHA::7}"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
