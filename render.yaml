@@ -20,6 +20,7 @@ services:
       paths:
         - apps/backend/**
         - Dockerfile
+        - .dockerignore
         - package.json
         - package-lock.json
     envVars:

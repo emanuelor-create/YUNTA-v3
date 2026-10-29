@@ -4,6 +4,8 @@
 **/.env.*
 !**/.env.example
 .git
-apps/frontend
+# Del front solo hace falta su package.json (npm ci valida el lockfile contra él).
+apps/frontend/*
+!apps/frontend/package.json
 design_handoff_yunta_ui
 **/*.log
