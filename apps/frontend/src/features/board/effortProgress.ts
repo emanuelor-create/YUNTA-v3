@@ -29,6 +29,8 @@ export interface EffortLevel {
   value: 1 | 2 | 3 | 5 | 8 | 13;
   /// Cuánto pesa, en pocas palabras.
   magnitude: string;
+  /// La idea en una frase corta, para la tabla de referencia ("Media · nueva funcionalidad sencilla").
+  gist: string;
   description: string;
   examples: string[];
   /// Cómo se rotulan los ejemplos. `null`: el texto va solo (el 13 no trae
@@ -41,6 +43,7 @@ export const EFFORT_SCALE: EffortLevel[] = [
   {
     value: 1,
     magnitude: 'Muy pequeña',
+    gist: 'cambio de texto, parámetro, ajuste CSS',
     description: 'Cambio de texto, parámetro, ajuste CSS. Trabajo prácticamente mecánico.',
     examples: ['Cambiar texto', 'Modificar etiqueta', 'Agregar un campo simple', 'Ajuste visual menor'],
     examplesLabel: 'Ej.',
@@ -48,6 +51,7 @@ export const EFFORT_SCALE: EffortLevel[] = [
   {
     value: 2,
     magnitude: 'Pequeña',
+    gist: 'CRUD simple, modificación menor',
     description: 'CRUD simple, modificación menor. Trabajo pequeño y conocido.',
     examples: ['Campo con validación', 'Modificar una consulta existente', 'Agregar un filtro', 'Regla sencilla'],
     examplesLabel: 'Ej.',
@@ -55,6 +59,7 @@ export const EFFORT_SCALE: EffortLevel[] = [
   {
     value: 3,
     magnitude: 'Media',
+    gist: 'nueva funcionalidad sencilla',
     description: 'Nueva funcionalidad sencilla, sobre piezas que ya existen.',
     examples: ['Endpoint sencillo', 'Nuevo formulario', 'CRUD simple', 'Pantalla con componentes existentes'],
     examplesLabel: 'Ej.',
@@ -62,6 +67,7 @@ export const EFFORT_SCALE: EffortLevel[] = [
   {
     value: 5,
     magnitude: 'Media/alta',
+    gist: 'funcionalidad con varias reglas',
     description: 'Funcionalidad con varias reglas de negocio: toca varias capas.',
     examples: ['Varias reglas de negocio', 'Integración con otro módulo', 'Proceso de varias etapas', 'Front + back + BD'],
     examplesLabel: 'Ej.',
@@ -69,6 +75,7 @@ export const EFFORT_SCALE: EffortLevel[] = [
   {
     value: 8,
     magnitude: 'Grande',
+    gist: 'módulo o integración compleja',
     description: 'Módulo o integración compleja. Conviene revisar el alcance antes de arrancar.',
     examples: ['Integración externa', 'Proceso complejo', 'Nuevo módulo', 'Migración', 'Muchas reglas'],
     examplesLabel: 'Ej.',
@@ -76,6 +83,7 @@ export const EFFORT_SCALE: EffortLevel[] = [
   {
     value: 13,
     magnitude: 'Muy grande',
+    gist: 'funcionalidad que debería dividirse',
     description: 'Funcionalidad que debería dividirse: no la ejecutes como una sola tarea.',
     examples: ['Dividir antes de asignar'],
     examplesLabel: null,

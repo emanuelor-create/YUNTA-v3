@@ -1,5 +1,5 @@
 import { Avatar } from '../../components/Avatar';
-import { Label } from '../../components/ui';
+import { Panel } from './detailUi';
 import { PROGRESS_STAGES, progressStage } from './effortProgress';
 import type { CardDetail } from './useBoard';
 
@@ -11,16 +11,16 @@ export function SubtasksSection({ card, onOpen }: { card: CardDetail; onOpen: (c
   const stage = progressStage(card.progress);
 
   return (
-    <section data-subtasks style={{ display: 'flex', flexDirection: 'column', border: '1px solid var(--line)', borderRadius: 'var(--radius-card)', background: 'var(--card)' }}>
-      <header style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px 0' }}>
-        <Label track="0.13em">Subtareas</Label>
-        <span style={{ flex: 1, height: 1, background: 'var(--line)' }} />
-        <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-3)' }}>
+    <Panel
+      title="Subtareas"
+      data-panel="subtareas"
+      action={
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-3)', whiteSpace: 'nowrap' }}>
           {card.subtasks.length} subtareas · {done} {done === 1 ? 'hecha' : 'hechas'}
         </span>
-      </header>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '14px 18px 18px' }}>
+      }
+    >
+      <div data-subtasks style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '15px 18px 18px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <span style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 700 }}>
             <span>Avance derivado · {card.progress}%{stage ? ` · ${stage.name}` : ''}</span>
@@ -64,6 +64,6 @@ export function SubtasksSection({ card, onOpen }: { card: CardDetail; onOpen: (c
           ))}
         </div>
       </div>
-    </section>
+    </Panel>
   );
 }

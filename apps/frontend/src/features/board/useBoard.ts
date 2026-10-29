@@ -2,6 +2,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../../lib/apiClient';
 import type { CardPriority } from './priority';
+import type { LabelTone } from './detailUi';
+
+export interface CardLabel {
+  id: string;
+  name: string;
+  tone: LabelTone;
+}
 
 // Espejo de BoardView / CardDetail del backend (projects.service.ts / cards.service.ts).
 export interface BoardCard {
@@ -14,6 +21,7 @@ export interface BoardCard {
   completed: boolean;
   storyPoints: number | null;
   assignees: { id: string; name: string }[];
+  labels: CardLabel[];
   /// Código de la tarjeta madre si esta es una subtarea; null si no.
   parentCode: string | null;
   /// Solo en un contenedor (tarjeta dividida): cuántas subtareas tiene y cuántas están hechas.
@@ -43,6 +51,7 @@ export interface CardDetail {
   title: string;
   description: string | null;
   priority: CardPriority | null;
+  startDate: string | null;
   dueDate: string | null;
   dueState: 'overdue' | 'soon' | null;
   progress: number;
@@ -51,6 +60,11 @@ export interface CardDetail {
   effortNote: string | null;
   completed: boolean;
   createdAt: string;
+  updatedAt: string;
+  createdBy: string | null;
+  labels: CardLabel[];
+  /// Las etiquetas que ya existen en el proyecto (sugerencias de "+ Etiqueta").
+  projectLabels: CardLabel[];
   column: { id: string; name: string };
   columns: { id: string; name: string }[];
   project: { id: string; key: string; name: string; color: string };
@@ -192,6 +206,33 @@ export function useSetDueDate(cardId: string) {
   return useMutation({
     mutationFn: (dueDate: string | null) =>
       apiFetch(`/cards/${cardId}/due-date`, { method: 'PATCH', body: JSON.stringify({ dueDate }) }),
+    onSuccess: () => refreshAfterBoardChange(queryClient),
+  });
+}
+
+/// Fecha de inicio ('AAAA-MM-DD' o null).
+export function useSetStartDate(cardId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (startDate: string | null) =>
+      apiFetch(`/cards/${cardId}/start-date`, { method: 'PATCH', body: JSON.stringify({ startDate }) }),
+    onSuccess: () => refreshAfterBoardChange(queryClient),
+  });
+}
+
+/// "+ Etiqueta": por nombre; el servidor reutiliza la del proyecto o la crea.
+export function useAddLabel(cardId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => apiFetch<CardLabel>(`/cards/${cardId}/labels`, { method: 'POST', body: JSON.stringify({ name }) }),
+    onSuccess: () => refreshAfterBoardChange(queryClient),
+  });
+}
+
+export function useRemoveLabel(cardId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (labelId: string) => apiFetch(`/cards/${cardId}/labels/${labelId}`, { method: 'DELETE' }),
     onSuccess: () => refreshAfterBoardChange(queryClient),
   });
 }

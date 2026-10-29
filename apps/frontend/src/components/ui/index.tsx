@@ -344,6 +344,8 @@ export function Modal({
   title,
   kicker,
   width = 720,
+  height,
+  bodyStyle,
   onClose,
   footer,
   header,
@@ -352,6 +354,10 @@ export function Modal({
   title?: string;
   kicker?: string;
   width?: number;
+  /** Alto fijo (se achica con la ventana). Sin él, crece con el contenido. */
+  height?: number;
+  /** Reemplaza el estilo del cuerpo (p. ej. dos paneles sin padding). */
+  bodyStyle?: CSSProperties;
   onClose: () => void;
   footer?: ReactNode;
   /** Reemplaza el header por completo (p. ej. la identidad del usuario). */
@@ -382,6 +388,7 @@ export function Modal({
         style={{
           position: "relative",
           width: px(width),
+          height: height === undefined ? undefined : px(height),
           maxWidth: "100%",
           maxHeight: "100%",
           background: "var(--page)",
@@ -417,7 +424,7 @@ export function Modal({
           </div>
         )}
 
-        <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "20px 26px 24px" }}>{children}</div>
+        <div style={bodyStyle ?? { flex: 1, minHeight: 0, overflow: "auto", padding: "20px 26px 24px" }}>{children}</div>
 
         {footer && (
           <div
