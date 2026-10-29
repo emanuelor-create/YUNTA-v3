@@ -197,12 +197,13 @@ export function StatusPill({ children, tone = "neutral", dot = true }: { childre
    coherencia, reemplazá PALETTE en ese archivo por AVATAR_PALETTE y dejá
    colorFor/initials/el componente intactos.                             */
 
+// Variables y no hex: los avatares siguen a la paleta activa (lib/palette.ts).
 export const AVATAR_PALETTE = [
-  "#1b1917", // ink
-  "#b4552f", // accent
-  "#8a5a2b", // clay
-  "#5c564d", // stone
-  "#8a8378", // ink-3
+  "var(--ink)",
+  "var(--accent)",
+  "var(--clay)",
+  "var(--stone)",
+  "var(--ink-3)",
 ];
 
 /** Dot de estado para superponer a un <Avatar> (el único añadido). */

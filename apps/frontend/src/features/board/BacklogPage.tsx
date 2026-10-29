@@ -120,7 +120,7 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
         fontFamily: 'var(--sans)',
         fontSize: 13.5,
         fontWeight: active ? 600 : 500,
-        color: active ? 'var(--cream, #F2EFE9)' : 'var(--ink-2)',
+        color: active ? 'var(--cream)' : 'var(--ink-2)',
         background: active ? 'var(--ink)' : 'transparent',
         border: `1px solid ${active ? 'var(--ink)' : 'var(--line-strong)'}`,
         borderRadius: 'var(--radius)',
@@ -407,7 +407,7 @@ function AddRow({ boardId, columnId, onClose }: { boardId: string; columnId: str
             borderRadius: 'var(--radius)',
             border: '1px solid var(--ink)',
             background: 'var(--ink)',
-            color: 'var(--cream, #F2EFE9)',
+            color: 'var(--cream)',
             cursor: 'pointer',
             opacity: !title.trim() ? 0.5 : 1,
           }}

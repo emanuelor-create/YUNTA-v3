@@ -10,6 +10,7 @@ import { EffortProgressSection } from './EffortProgressSection';
 import { SubtasksSection } from './SubtasksSection';
 import { CardPriority, PRIORITY_LABEL } from './priority';
 import { useAssignees, useCardDetail, useDeleteCard, useMoveCard, useSetDueDate, useSetPriority, useUpdateCard } from './useBoard';
+import { paletteColor } from '../../lib/brandColor';
 
 const FIELD: CSSProperties = {
   width: '100%',
@@ -104,7 +105,7 @@ function DetailBody({ card, onClose, onOpenCard }: { card: NonNullable<ReturnTyp
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, padding: '22px 26px 18px', borderBottom: '1px solid var(--line-strong)' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 0 }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--ink-3)' }}>
-              <span style={{ width: 8, height: 8, borderRadius: 2, background: card.project.color }} />
+              <span style={{ width: 8, height: 8, borderRadius: 2, background: paletteColor(card.project.color) }} />
               {card.project.name}
               <span style={{ fontFamily: 'var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace)', letterSpacing: '0.02em', color: 'var(--ink-2)' }}>· {card.code}</span>
               {card.parent && (

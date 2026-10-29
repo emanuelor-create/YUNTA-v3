@@ -8,6 +8,7 @@ import { useCurrentUser } from '../auth/useCurrentUser';
 import { CreateProjectModal } from './CreateProjectModal';
 import { deriveStatus, dueNote, STATUS_LABEL, STATUS_STYLE, StatusKey } from './projectStatus';
 import { ProjectSummary, useProjects, useToggleFavorite } from './useProjects';
+import { paletteColor } from '../../lib/brandColor';
 
 type FilterKey = 'TODOS' | 'EN_CURSO' | 'EN_RIESGO' | 'CERRADOS';
 const FILTER_CHIPS: { key: FilterKey; label: string }[] = [
@@ -312,7 +313,7 @@ function ProjectRow({
             fontWeight: 600,
             fontSize: 12,
             color: 'var(--cream)',
-            background: project.color,
+            background: paletteColor(project.color),
           }}
         >
           {projectInitials(project.name)}
@@ -344,7 +345,7 @@ function ProjectRow({
           </span>
         </span>
         <span style={{ height: 4, background: 'var(--line)', display: 'block', width: '100%' }}>
-          <span style={{ display: 'block', height: 4, background: project.color, width: `${pct}%` }} />
+          <span style={{ display: 'block', height: 4, background: paletteColor(project.color), width: `${pct}%` }} />
         </span>
       </div>
 

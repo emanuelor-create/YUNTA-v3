@@ -7,6 +7,7 @@ import { formatRelativeTime, formatShortDate } from '../../lib/formatRelativeTim
 import { useAuth } from '../auth/AuthProvider';
 import { UserListItem, UserRole, UserStatus, useUsers } from './useUsers';
 import { CAPACITY } from '../../lib/capacity';
+import { paletteColor } from '../../lib/brandColor';
 
 const TABLE_TEMPLATE = '34px minmax(170px,2.2fr) 120px minmax(100px,1.1fr) 110px 130px 120px 34px';
 
@@ -373,7 +374,7 @@ function UserRow({
             <span
               key={project.id}
               title={project.name}
-              style={{ width: 9, height: 22, marginRight: 3, background: project.color, borderRadius: 'var(--radius-tick)' }}
+              style={{ width: 9, height: 22, marginRight: 3, background: paletteColor(project.color), borderRadius: 'var(--radius-tick)' }}
             />
           ))}
         </span>

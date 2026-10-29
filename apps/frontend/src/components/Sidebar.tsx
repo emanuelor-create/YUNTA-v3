@@ -2,10 +2,12 @@ import { ReactNode, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Avatar } from './Avatar';
 import { YuntaMark } from './YuntaLogo';
+import { applyPalette, getStoredPalette, Palette, PALETTES } from '../lib/palette';
 import { useAuth } from '../features/auth/AuthProvider';
 import { useCurrentUser } from '../features/auth/useCurrentUser';
 import { useProjects } from '../features/projects/useProjects';
 import { ChevronIcon, DashboardIcon, FolderIcon, LogoutIcon, SettingsIcon, StarIcon, UsersIcon } from '../features/board/icons';
+import { paletteColor } from '../lib/brandColor';
 
 const COLLAPSE_STORAGE_KEY = 'yunta:sidebar-collapsed';
 const ROLE_LABEL: Record<string, string> = { ADMIN: 'Admin', PM: 'PM', DEVELOPER: 'Developer' };
@@ -157,7 +159,7 @@ export function Sidebar() {
               to={`/projects/${project.id}/resumen`}
               icon={<FolderIcon size={16} />}
               label={project.name}
-              tint={project.color}
+              tint={paletteColor(project.color)}
               collapsed={collapsed}
               active={isActive(`/projects/${project.id}`)}
             />
@@ -235,6 +237,8 @@ export function Sidebar() {
           </div>
         )}
 
+        <PalettePicker collapsed={collapsed} />
+
         <SidebarRow
           icon={<LogoutIcon size={16} />}
           label="Salir"
@@ -243,6 +247,57 @@ export function Sidebar() {
         />
       </div>
     </aside>
+  );
+}
+
+/// Cuadrados de 20px con el color de cada paleta (PALETTE.md §3). Con la barra
+/// colapsada se apilan en columna.
+function PalettePicker({ collapsed }: { collapsed: boolean }) {
+  const [current, setCurrent] = useState<Palette>(getStoredPalette);
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Paleta de color"
+      style={{
+        display: 'flex',
+        flexDirection: collapsed ? 'column' : 'row',
+        alignItems: 'center',
+        gap: 10,
+        padding: collapsed ? '4px 0' : '4px 12px',
+      }}
+    >
+      {!collapsed && (
+        <span style={{ fontWeight: 600, fontSize: 10.5, letterSpacing: '0.12em', color: 'var(--sidebar-section)', marginRight: 'auto' }}>
+          PALETA
+        </span>
+      )}
+      {PALETTES.map((p) => {
+        const active = p.id === current;
+        return (
+          <button
+            key={p.id}
+            role="radio"
+            aria-checked={active}
+            title={p.label}
+            onClick={() => {
+              applyPalette(p.id);
+              setCurrent(p.id);
+            }}
+            style={{
+              width: 20,
+              height: 20,
+              padding: 0,
+              border: 0,
+              borderRadius: 'var(--radius-tick)',
+              background: p.swatch,
+              cursor: 'pointer',
+              outline: active ? '2px solid var(--accent)' : 'none',
+              outlineOffset: 2,
+            }}
+          />
+        );
+      })}
+    </div>
   );
 }
 

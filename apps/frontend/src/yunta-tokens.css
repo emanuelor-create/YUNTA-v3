@@ -123,6 +123,7 @@
    ────────────────────────────────────────────────────────────────────────── */
 
 :root[data-palette="azul"] {
+  --cream: #ffffff;           /* texto sobre tinta (botón primario, chip activo) */
   --page: #ffffff;
   --card: #ffffff;
   --field: #ffffff;

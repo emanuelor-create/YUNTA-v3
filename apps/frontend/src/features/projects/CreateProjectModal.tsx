@@ -4,14 +4,16 @@ import { useNavigate } from 'react-router-dom';
 import { Button, Label, Modal } from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
 import { useCreateProject } from './useProjects';
+import { paletteColor } from '../../lib/brandColor';
 
-// La paleta de marca (los mismos 5 hex que el backend acepta y AVATAR_PALETTE).
+// Los 5 hex de marca que acepta el backend. Se dibujan con paletteColor(), así
+// que siguen a la paleta activa: por eso los nombres no dicen "terracota".
 const COLORS: { hex: string; name: string }[] = [
   { hex: '#1b1917', name: 'Tinta' },
-  { hex: '#b4552f', name: 'Terracota' },
-  { hex: '#8a5a2b', name: 'Arcilla' },
+  { hex: '#b4552f', name: 'Acento' },
+  { hex: '#8a5a2b', name: 'Secundario' },
   { hex: '#5c564d', name: 'Piedra' },
-  { hex: '#8a8378', name: 'Gris cálido' },
+  { hex: '#8a8378', name: 'Gris' },
 ];
 
 const FIELD: CSSProperties = {
@@ -134,10 +136,10 @@ export function CreateProjectModal({ onClose }: { onClose: () => void }) {
                     width: 34,
                     height: 34,
                     borderRadius: 8,
-                    background: option.hex,
+                    background: paletteColor(option.hex),
                     cursor: 'pointer',
                     border: '2px solid var(--page)',
-                    boxShadow: selected ? `0 0 0 2px ${option.hex}` : '0 0 0 1px var(--line-strong)',
+                    boxShadow: selected ? `0 0 0 2px ${paletteColor(option.hex)}` : '0 0 0 1px var(--line-strong)',
                   }}
                 />
               );
