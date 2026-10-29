@@ -30,13 +30,20 @@ jobs:
       - run: npm ci
 
       - name: Compilar frontend
-        run: npm run build:frontend
+        run: |
+          for v in VITE_API_URL VITE_SUPABASE_URL VITE_SUPABASE_ANON_KEY; do
+            if [ -z "${!v}" ]; then
+              echo "::error::Falta $v. Cargala en Settings → Secrets and variables → Actions."
+              exit 1
+            fi
+          done
+          npm run build:frontend
         env:
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
-          # Settings → Secrets and variables → Actions → pestaña "Variables"
-          VITE_API_URL: ${{ vars.VITE_API_URL }}
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+          # Settings → Secrets and variables → Actions (pestaña Variables o Secrets)
+          VITE_API_URL: ${{ vars.VITE_API_URL || secrets.VITE_API_URL }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY || secrets.VITE_SUPABASE_ANON_KEY }}
 
       # Pages no tiene rewrites: con 404.html = index.html, recargar
       # /projects/... sigue cargando la app en vez de dar error.
