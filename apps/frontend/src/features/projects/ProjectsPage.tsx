@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Avatar } from '../../components/Avatar';
 import { Button, Label } from '../../components/ui';
@@ -19,6 +19,17 @@ const FILTER_CHIPS: { key: FilterKey; label: string }[] = [
 ];
 
 const TABLE_TEMPLATE = 'minmax(200px,2.3fr) 170px 120px 140px minmax(130px,1fr)';
+const PAGE_SIZE = 10;
+
+type SortKey = 'NOMBRE' | 'ENTREGA' | 'AVANCE' | 'ESTADO';
+const SORTS: { key: SortKey; label: string }[] = [
+  { key: 'NOMBRE', label: 'Nombre (A–Z)' },
+  { key: 'ENTREGA', label: 'Entrega más próxima' },
+  { key: 'AVANCE', label: 'Menos avanzados primero' },
+  { key: 'ESTADO', label: 'Estado (en riesgo primero)' },
+];
+const STATUS_ORDER: Record<StatusKey, number> = { EN_RIESGO: 0, EN_CURSO: 1, PLANIFICADO: 2, CERRADO: 3 };
+const progressOf = (p: ProjectSummary) => (p.taskCount > 0 ? p.doneCount / p.taskCount : 0);
 
 function projectInitials(name: string): string {
   const bigWords = name
@@ -40,6 +51,8 @@ export function ProjectsPage() {
   const canCreate = me?.profile?.role === 'ADMIN' || me?.profile?.role === 'PM';
   const [filter, setFilter] = useState<FilterKey>('TODOS');
   const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<SortKey>('NOMBRE');
+  const [page, setPage] = useState(0);
   const { data: projects, isLoading, isError } = useProjects(showArchived);
   const toggleFavorite = useToggleFavorite();
   const navigate = useNavigate();
@@ -56,15 +69,32 @@ export function ProjectsPage() {
       if (!query.trim()) return true;
       const q = query.trim().toLowerCase();
       return project.name.toLowerCase().includes(q) || (project.client ?? '').toLowerCase().includes(q);
+    })
+    .sort((a, b) => {
+      if (sort === 'ENTREGA') {
+        // Sin fecha, al final.
+        const ta = a.project.endDate ? new Date(a.project.endDate).getTime() : Infinity;
+        const tb = b.project.endDate ? new Date(b.project.endDate).getTime() : Infinity;
+        if (ta !== tb) return ta - tb;
+      } else if (sort === 'AVANCE') {
+        const diff = progressOf(a.project) - progressOf(b.project);
+        if (diff !== 0) return diff;
+      } else if (sort === 'ESTADO') {
+        const diff = STATUS_ORDER[a.status] - STATUS_ORDER[b.status];
+        if (diff !== 0) return diff;
+      }
+      return a.project.name.localeCompare(b.project.name, 'es');
     });
+
+  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount - 1);
+  const pageRows = rows.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
 
   const activos = (projects ?? []).filter((p) => deriveStatus(p, now) !== 'CERRADO').length;
   const tareasAbiertas = (projects ?? []).reduce((sum, p) => sum + (p.taskCount - p.doneCount), 0);
-  const vencenEstaSemana = (projects ?? []).filter((p) => {
-    if (!p.endDate || deriveStatus(p, now) === 'CERRADO') return false;
-    const days = Math.round((new Date(p.endDate).getTime() - now.getTime()) / 86_400_000);
-    return days >= 0 && days <= 7;
-  }).length;
+  // Tareas, no proyectos (diseño YUNTA): las mismas definiciones que el Dashboard.
+  const vencenEstaSemana = (projects ?? []).reduce((sum, p) => sum + (p.dueSoonCount ?? 0), 0);
+  const sinResponsable = (projects ?? []).reduce((sum, p) => sum + (p.unassignedCount ?? 0), 0);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -106,7 +136,8 @@ export function ProjectsPage() {
         >
           <StatCell label="Activos" value={activos} />
           <StatCell label="Tareas abiertas" value={tareasAbiertas} />
-          <StatCell label="Vencen esta semana" value={vencenEstaSemana} accent last />
+          <StatCell label="Vencen esta semana" value={vencenEstaSemana} accent />
+          <StatCell label="Sin responsable" value={sinResponsable} last />
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 18, flexWrap: 'wrap' }}>
@@ -116,7 +147,10 @@ export function ProjectsPage() {
               return (
                 <button
                   key={chip.key}
-                  onClick={() => setFilter(chip.key)}
+                  onClick={() => {
+                    setFilter(chip.key);
+                    setPage(0);
+                  }}
                   style={{
                     fontFamily: 'var(--sans)',
                     fontSize: 13,
@@ -149,7 +183,10 @@ export function ProjectsPage() {
               <SearchIcon />
               <input
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setPage(0);
+                }}
                 placeholder="Buscar proyecto o cliente"
                 style={{
                   fontFamily: 'var(--sans)',
@@ -162,6 +199,13 @@ export function ProjectsPage() {
                 }}
               />
             </span>
+            <SortMenu
+              value={sort}
+              onChange={(next) => {
+                setSort(next);
+                setPage(0);
+              }}
+            />
           </div>
         </div>
       </header>
@@ -196,7 +240,7 @@ export function ProjectsPage() {
         {isError && <EmptyRow>No se pudo cargar la lista de proyectos.</EmptyRow>}
         {!isLoading && !isError && rows.length === 0 && <EmptyRow>Sin resultados.</EmptyRow>}
 
-        {rows.map(({ project, status }) => (
+        {pageRows.map(({ project, status }) => (
           <ProjectRow
             key={project.id}
             project={project}
@@ -221,12 +265,15 @@ export function ProjectsPage() {
             color: 'var(--ink-3)',
           }}
         >
-          <span>Mostrando {rows.length} de {projects?.length ?? 0} proyectos</span>
+          <span>
+            Mostrando {pageRows.length} de {rows.length} {rows.length === 1 ? 'proyecto' : 'proyectos'}
+            {pageCount > 1 && ` · página ${currentPage + 1} de ${pageCount}`}
+          </span>
           <span style={{ display: 'flex', gap: 8 }}>
-            <Button variant="ghost" disabled>
+            <Button variant="ghost" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>
               Anterior
             </Button>
-            <Button variant="ghost" disabled>
+            <Button variant="ghost" disabled={currentPage >= pageCount - 1} onClick={() => setPage(currentPage + 1)}>
               Siguiente
             </Button>
           </span>
@@ -389,6 +436,103 @@ function ProjectRow({
         </span>
         <span style={{ fontSize: 18, lineHeight: 1, color: 'var(--ink-4)', padding: '0 2px' }}>···</span>
       </div>
+    </div>
+  );
+}
+
+/// "Ordenar" del diseño YUNTA: botón con rótulo en mayúsculas que abre la lista
+/// de criterios. Se cierra al elegir, al hacer clic afuera o con Escape.
+function SortMenu({ value, onChange }: { value: SortKey; onChange: (next: SortKey) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        title={`Ordenado por: ${SORTS.find((s) => s.key === value)?.label}`}
+        style={{
+          fontFamily: 'var(--sans)',
+          fontSize: 11.5,
+          fontWeight: 600,
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          color: value === 'NOMBRE' ? 'var(--ink-2)' : 'var(--ink)',
+          background: 'var(--card)',
+          border: `1px solid ${open || value !== 'NOMBRE' ? 'var(--ink)' : 'var(--line-strong)'}`,
+          borderRadius: 'var(--radius)',
+          padding: '11px 14px',
+          cursor: 'pointer',
+        }}
+      >
+        Ordenar
+      </button>
+      {open && (
+        <div
+          role="listbox"
+          style={{
+            position: 'absolute',
+            right: 0,
+            top: 'calc(100% + 6px)',
+            zIndex: 20,
+            minWidth: 230,
+            background: 'var(--page)',
+            border: '1px solid var(--line-strong)',
+            borderRadius: 'var(--radius-card)',
+            boxShadow: '0 12px 32px rgba(0,0,0,0.12)',
+            padding: 6,
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          {SORTS.map((option) => {
+            const active = option.key === value;
+            return (
+              <button
+                key={option.key}
+                role="option"
+                aria-selected={active}
+                onClick={() => {
+                  onChange(option.key);
+                  setOpen(false);
+                }}
+                style={{
+                  fontFamily: 'var(--sans)',
+                  fontSize: 13.5,
+                  fontWeight: active ? 600 : 400,
+                  textAlign: 'left',
+                  color: 'var(--ink)',
+                  background: active ? 'var(--row-sel)' : 'transparent',
+                  border: 0,
+                  borderRadius: 'var(--radius)',
+                  padding: '9px 12px',
+                  cursor: 'pointer',
+                }}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

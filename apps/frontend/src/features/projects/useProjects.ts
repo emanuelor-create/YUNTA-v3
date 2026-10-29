@@ -11,6 +11,10 @@ export interface ProjectSummary {
   endDate: string | null;
   taskCount: number;
   doneCount: number;
+  /// Abiertas que vencen en los próximos 7 días.
+  dueSoonCount: number;
+  /// Abiertas sin nadie asignado.
+  unassignedCount: number;
   team: { id: string; name: string }[];
 }
 

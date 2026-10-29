@@ -64,6 +64,11 @@ export interface ProjectSummary {
   endDate: Date | null;
   taskCount: number;
   doneCount: number;
+  /// Abiertas que vencen en los próximos 7 días (isDueSoon, la misma
+  /// definición que el Dashboard y el Resumen).
+  dueSoonCount: number;
+  /// Abiertas sin nadie asignado.
+  unassignedCount: number;
   team: { id: string; name: string }[];
 }
 
@@ -130,7 +135,12 @@ export class ProjectsService {
       // se agrega acá en vez de hacer una consulta por proyecto.
       this.prisma.card.findMany({
         where: { column: { board: { projectId: { in: projectIds } } }, ...LEAF },
-        select: { completedAt: true, column: { select: { board: { select: { projectId: true } } } } },
+        select: {
+          completedAt: true,
+          dueDate: true,
+          _count: { select: { assignees: true } },
+          column: { select: { board: { select: { projectId: true } } } },
+        },
       }),
     ]);
 
@@ -141,14 +151,21 @@ export class ProjectsService {
       teamByProject.set(row.projectId, team);
     }
 
+    const now = new Date();
+    const bump = (map: Map<string, number>, key: string) => map.set(key, (map.get(key) ?? 0) + 1);
     const taskCountByProject = new Map<string, number>();
     const doneCountByProject = new Map<string, number>();
+    const dueSoonByProject = new Map<string, number>();
+    const unassignedByProject = new Map<string, number>();
     for (const card of cardRows) {
       const projectId = card.column.board.projectId;
-      taskCountByProject.set(projectId, (taskCountByProject.get(projectId) ?? 0) + 1);
+      bump(taskCountByProject, projectId);
       if (card.completedAt) {
-        doneCountByProject.set(projectId, (doneCountByProject.get(projectId) ?? 0) + 1);
+        bump(doneCountByProject, projectId);
+        continue;
       }
+      if (isDueSoon(card, now)) bump(dueSoonByProject, projectId);
+      if (card._count.assignees === 0) bump(unassignedByProject, projectId);
     }
 
     return projects.map((project) => ({
@@ -161,6 +178,8 @@ export class ProjectsService {
       endDate: project.endDate,
       taskCount: taskCountByProject.get(project.id) ?? 0,
       doneCount: doneCountByProject.get(project.id) ?? 0,
+      dueSoonCount: dueSoonByProject.get(project.id) ?? 0,
+      unassignedCount: unassignedByProject.get(project.id) ?? 0,
       team: teamByProject.get(project.id) ?? [],
     }));
   }

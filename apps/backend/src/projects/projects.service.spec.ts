@@ -289,9 +289,9 @@ describe('ProjectsService.list', () => {
       { projectId: 'proj-1', user: { id: 'u2', name: 'Bruno' } },
     ]);
     prisma.card.findMany.mockResolvedValue([
-      { completedAt: new Date(), column: { board: { projectId: 'proj-1' } } },
-      { completedAt: null, column: { board: { projectId: 'proj-1' } } },
-      { completedAt: null, column: { board: { projectId: 'proj-1' } } },
+      { completedAt: new Date(), dueDate: null, _count: { assignees: 1 }, column: { board: { projectId: 'proj-1' } } },
+      { completedAt: null, dueDate: null, _count: { assignees: 1 }, column: { board: { projectId: 'proj-1' } } },
+      { completedAt: null, dueDate: null, _count: { assignees: 2 }, column: { board: { projectId: 'proj-1' } } },
     ]);
 
     const [result] = await service.list('user-1', false);
@@ -306,6 +306,8 @@ describe('ProjectsService.list', () => {
       endDate: null,
       taskCount: 3,
       doneCount: 1,
+      dueSoonCount: 0,
+      unassignedCount: 0,
       team: [
         { id: 'u1', name: 'Ana' },
         { id: 'u2', name: 'Bruno' },
@@ -314,6 +316,38 @@ describe('ProjectsService.list', () => {
     // Una consulta por tipo de dato, no una por proyecto.
     expect(prisma.projectMember.findMany).toHaveBeenCalledTimes(1);
     expect(prisma.card.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('cuenta las abiertas que vencen en 7 días y las abiertas sin asignar (las cerradas no)', async () => {
+    const now = Date.now();
+    const inDays = (n: number) => new Date(now + n * 24 * 60 * 60 * 1000);
+    prisma.project.findMany.mockResolvedValue([
+      { id: 'proj-1', name: 'X', client: null, color: '#1b1917', startDate: null, endDate: null, members: [] },
+    ]);
+    const card = (completedAt: Date | null, dueDate: Date | null, assignees: number) => ({
+      completedAt,
+      dueDate,
+      _count: { assignees },
+      column: { board: { projectId: 'proj-1' } },
+    });
+    prisma.card.findMany.mockResolvedValue([
+      card(null, inDays(2), 1), // vence pronto, asignada
+      card(null, inDays(6), 0), // vence pronto, sin asignar
+      card(null, inDays(20), 0), // lejos, sin asignar
+      card(null, inDays(-1), 1), // vencida: no es "vence pronto"
+      card(new Date(), inDays(1), 0), // cerrada: no cuenta para ninguna
+    ]);
+
+    const [result] = await service.list('user-1', false);
+
+    expect(result.dueSoonCount).toBe(2);
+    expect(result.unassignedCount).toBe(2);
+    // Pide fecha y cantidad de asignados en la misma consulta de tarjetas.
+    expect(prisma.card.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({ dueDate: true, _count: { select: { assignees: true } } }),
+      }),
+    );
   });
 
   it('isFavorite es false si el usuario no marcó el proyecto', async () => {
