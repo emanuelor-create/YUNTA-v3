@@ -1,8 +1,8 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, MouseEvent, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { Button, Label } from '../../components/ui';
 import { YuntaMark, YuntaWordmark } from '../../components/YuntaLogo';
-import { supabase } from '../../lib/supabaseClient';
+import { appRootUrl, supabase } from '../../lib/supabaseClient';
 import { useAuth } from './AuthProvider';
 
 const POINTS = [
@@ -11,9 +11,9 @@ const POINTS = [
   { n: '03', text: 'Cada decisión queda anotada junto a la tarea' },
 ];
 
-// Yunta-Login.html, pixel a pixel. Google/Microsoft/SSO, "Pedí acceso" y
-// "Olvidé mi contraseña" quedan como placeholders (href="#" en el diseño):
-// no hay proveedores OAuth ni flujo de recuperación conectados todavía.
+// Yunta-Login.html, pixel a pixel. Google/Microsoft/SSO y "Pedí acceso"
+// quedan como placeholders (href="#" en el diseño): no hay proveedores OAuth
+// conectados todavía. "Olvidé mi contraseña" manda el mail de Supabase.
 export function LoginPage() {
   const { session, loading } = useAuth();
   const location = useLocation();
@@ -24,6 +24,8 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
+  const [sendingReset, setSendingReset] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   if (loading) {
     return null;
@@ -34,9 +36,28 @@ export function LoginPage() {
     return <Navigate to={from} replace />;
   }
 
+  async function handleForgotPassword(event: MouseEvent) {
+    event.preventDefault();
+    setError(null);
+    setNotice(null);
+    if (!email.trim()) {
+      setError('Escribí tu correo arriba y volvé a tocar "Olvidé mi contraseña".');
+      return;
+    }
+    setSendingReset(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: appRootUrl() });
+    setSendingReset(false);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setNotice(`Si ${email.trim()} tiene cuenta, te llega un mail con un link para elegir una contraseña nueva.`);
+  }
+
   async function handleSubmit(event?: FormEvent) {
     event?.preventDefault();
     setError(null);
+    setNotice(null);
     setSubmitting(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setSubmitting(false);
@@ -201,8 +222,12 @@ export function LoginPage() {
             <label style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                 <Label>Contraseña</Label>
-                <a href="#" style={{ fontSize: 13, color: 'var(--ink-3)' }}>
-                  Olvidé mi contraseña
+                <a
+                  href="#"
+                  onClick={handleForgotPassword}
+                  style={{ fontSize: 13, color: 'var(--ink-3)', opacity: sendingReset ? 0.6 : 1 }}
+                >
+                  {sendingReset ? 'Enviando…' : 'Olvidé mi contraseña'}
                 </a>
               </span>
               <span
@@ -253,6 +278,11 @@ export function LoginPage() {
           {error && (
             <p role="alert" style={{ margin: 0, fontSize: 13, color: 'var(--accent-ink)' }}>
               {error}
+            </p>
+          )}
+          {notice && (
+            <p role="status" style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: 'var(--ink-2)' }}>
+              {notice}
             </p>
           )}
 
