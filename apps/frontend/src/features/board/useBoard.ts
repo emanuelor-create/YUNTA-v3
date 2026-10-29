@@ -22,6 +22,7 @@ export interface BoardCard {
   storyPoints: number | null;
   assignees: { id: string; name: string }[];
   labels: CardLabel[];
+  commentCount: number;
   /// Código de la tarjeta madre si esta es una subtarea; null si no.
   parentCode: string | null;
   /// Solo en un contenedor (tarjeta dividida): cuántas subtareas tiene y cuántas están hechas.
@@ -101,10 +102,29 @@ function refreshAfterBoardChange(queryClient: QueryClient) {
 
 export const boardKey = (projectId: string) => ['projects', 'board', projectId] as const;
 
+// Campos nuevos (etiquetas, comentarios, inicio) con valor por defecto: si el
+// backend todavía no los manda (deploy a medias), la pantalla sigue andando.
+const withBoardDefaults = (board: BoardView): BoardView => ({
+  ...board,
+  columns: board.columns.map((column) => ({
+    ...column,
+    cards: column.cards.map((card) => ({ ...card, labels: card.labels ?? [], commentCount: card.commentCount ?? 0 })),
+  })),
+});
+
+const withDetailDefaults = (card: CardDetail): CardDetail => ({
+  ...card,
+  startDate: card.startDate ?? null,
+  updatedAt: card.updatedAt ?? card.createdAt,
+  createdBy: card.createdBy ?? null,
+  labels: card.labels ?? [],
+  projectLabels: card.projectLabels ?? [],
+});
+
 export function useBoard(projectId: string) {
   return useQuery({
     queryKey: boardKey(projectId),
-    queryFn: () => apiFetch<BoardView>(`/projects/${projectId}/board`),
+    queryFn: async () => withBoardDefaults(await apiFetch<BoardView>(`/projects/${projectId}/board`)),
   });
 }
 
@@ -171,12 +191,22 @@ export function useAddColumn(boardId: string) {
   });
 }
 
+/// Borra una columna (solo OWNER). Sus tarjetas pasan a la primera columna; si
+/// era la última, dejan de estar hechas. El servidor resuelve todo eso.
+export function useDeleteColumn(boardId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (columnId: string) => apiFetch(`/boards/${boardId}/columns/${columnId}`, { method: 'DELETE' }),
+    onSuccess: () => refreshAfterBoardChange(queryClient),
+  });
+}
+
 // ── Detalle de tarjeta ───────────────────────────────────────────────────
 
 export function useCardDetail(cardId: string | null) {
   return useQuery({
     queryKey: ['cards', 'detail', cardId],
-    queryFn: () => apiFetch<CardDetail>(`/cards/${cardId}`),
+    queryFn: async () => withDetailDefaults(await apiFetch<CardDetail>(`/cards/${cardId}`)),
     enabled: !!cardId,
   });
 }

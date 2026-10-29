@@ -67,6 +67,31 @@ describe('ProjectsService.getBoard', () => {
     expect(board.project).toEqual({ id: 'proj-1', key: 'RED', name: 'Rediseño', color: '#b4552f' });
   });
 
+  it('cada tarjeta trae sus etiquetas y cuántos comentarios tiene', async () => {
+    prisma.project.findUnique.mockResolvedValue(
+      project({
+        board: {
+          id: 'board-1',
+          columns: [
+            {
+              id: 'c0',
+              name: 'Por hacer',
+              cards: [card('a', 1, { labels: [{ label: { id: 'l1', name: 'Diseño', tone: 'ACCENT' } }], _count: { comments: 3 } }), card('b', 2)],
+            },
+          ],
+        },
+      }),
+    );
+
+    const board = await service.getBoard('proj-1', 'user-1');
+    const [a, b] = board.columns[0].cards;
+
+    expect(a.labels).toEqual([{ id: 'l1', name: 'Diseño', tone: 'ACCENT' }]);
+    expect(a.commentCount).toBe(3);
+    expect(b.labels).toEqual([]);
+    expect(b.commentCount).toBe(0);
+  });
+
   it('cada tarjeta trae código (clave + número), prioridad y asignados', async () => {
     const [a, b] = (await service.getBoard('proj-1', 'u1')).columns[0].cards;
     const c = (await service.getBoard('proj-1', 'u1')).columns[1].cards[0];

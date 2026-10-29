@@ -6,6 +6,7 @@ import { ApiError } from '../../lib/apiClient';
 import { formatShortDate } from '../../lib/formatRelativeTime';
 import { ProjectShell } from '../projects/ProjectShell';
 import { CardDetailModal } from './CardDetailModal';
+import { columnDot, LabelPill } from './detailUi';
 import { PlusIcon } from './icons';
 import { CardPriority, PRIORITY_LABEL } from './priority';
 import { BoardCard, BoardColumn, useBoard, useCreateCard } from './useBoard';
@@ -13,9 +14,6 @@ import { BoardCard, BoardColumn, useBoard, useCreateCard } from './useBoard';
 // Yunta-Proyecto-Tabs.html, vista "Backlog": las mismas tarjetas del tablero en
 // lista, agrupadas por columna. Lee del mismo endpoint que el Tablero
 // (GET /projects/:id/board), así que todo lo que se cambia en una se ve en la otra.
-//
-// Diferencia con el diseño: la columna de etiquetas se reemplaza por el esfuerzo
-// (puntos), porque las tarjetas todavía no tienen etiquetas.
 
 type Filter = 'todas' | 'abiertas' | 'cerradas';
 
@@ -25,8 +23,8 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: 'cerradas', label: 'Cerradas' },
 ];
 
-// check · título · esfuerzo · vence · prioridad · personas
-const ROW_GRID = '18px minmax(0,1fr) 64px 96px 92px 76px';
+// check · título · etiquetas · vence · prioridad · personas (como el diseño)
+const ROW_GRID = '18px minmax(0,1fr) 150px 96px 92px 76px';
 
 export function BacklogPage() {
   const { id } = useParams<{ id: string }>();
@@ -80,7 +78,7 @@ function BacklogBody({ projectId }: { projectId: string }) {
           <Group
             key={column.id}
             column={column}
-            dot={dotFor(column, index)}
+            dot={columnDot(index, board.columns.length)}
             rows={column.cards.filter(matches)}
             boardId={board.boardId}
             canEdit={board.canEdit}
@@ -96,15 +94,6 @@ function BacklogBody({ projectId }: { projectId: string }) {
       )}
     </>
   );
-}
-
-/// Punto de color del grupo: la primera columna en neutro, la última ("hecho")
-/// en verde y las del medio en las categorías de la paleta, como el diseño.
-function dotFor(column: BoardColumn, index: number): string {
-  if (column.isDone) return 'var(--ok)';
-  if (index === 0) return 'var(--neutral)';
-  const middle = ['var(--accent)', 'var(--clay)', 'var(--stone)'];
-  return middle[(index - 1) % middle.length]!;
 }
 
 function Message({ children }: { children: string }) {
@@ -290,13 +279,16 @@ function Row({ card, onOpen }: { card: BoardCard; onOpen: () => void }) {
         </span>
         <span style={{ fontSize: 11.5, color: 'var(--ink-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {card.code}
+          {card.storyPoints !== null && ` · ${card.storyPoints} ${card.storyPoints === 1 ? 'pt' : 'pts'}`}
           {card.parentCode && ` · subtarea de ${card.parentCode}`}
           {container && ` · ${card.subtasks!.total} subtareas, ${card.subtasks!.done} ${card.subtasks!.done === 1 ? 'hecha' : 'hechas'}`}
         </span>
       </span>
 
-      <span title="Esfuerzo" style={{ fontSize: 12.5, color: 'var(--ink-3)', textAlign: 'right' }}>
-        {card.storyPoints !== null ? `${card.storyPoints} ${card.storyPoints === 1 ? 'pt' : 'pts'}` : ''}
+      <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
+        {card.labels.map((label) => (
+          <LabelPill key={label.id} name={label.name} tone={label.tone} size="sm" />
+        ))}
       </span>
 
       <span
