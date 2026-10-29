@@ -113,7 +113,7 @@ export function LoginPage() {
               fontWeight: 800,
               letterSpacing: '-0.035em',
               lineHeight: 1.03,
-              color: 'var(--cream)',
+              color: 'var(--sidebar-text-strong)',
               textWrap: 'pretty',
             }}
           >

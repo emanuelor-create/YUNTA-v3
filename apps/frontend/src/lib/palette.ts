@@ -30,4 +30,6 @@ export function applyPalette(palette: Palette) {
   } catch {
     // Ventana privada u otro bloqueo: la elección dura hasta recargar.
   }
+  // El sidebar y el perfil escuchan esto para mostrar la elección actual.
+  window.dispatchEvent(new CustomEvent('yunta:appearance'));
 }

@@ -89,6 +89,8 @@
 }
 
 :root[data-theme="dark"] {
+  color-scheme: dark;         /* calendarios, scrollbars y selects nativos en oscuro */
+  --cream: #1b1917;           /* texto sobre tinta: en oscuro la tinta es clara */
   --page: #1b1917;
   --card: #221f1c;
   --field: #2a2622;
@@ -162,6 +164,51 @@
   --sidebar-text: #9fadbf;
   --sidebar-text-strong: #ffffff;
   --sidebar-section: #64748b;
+}
+
+:root[data-theme="dark"][data-palette="azul"] {
+  /* Azul en modo oscuro: azul marino profundo, mismo acento eléctrico. Va con
+     doble atributo para ganarle a :root[data-palette="azul"] (que es claro). */
+  color-scheme: dark;
+  --cream: #0b1220;
+  --page: #0b1220;
+  --card: #111a2b;
+  --field: #16213a;
+  --canvas: #0e1626;
+  --row-hover: #142037;
+  --row-sel: #1a2b4d;
+
+  --line: #22314d;
+  --line-soft: #1a2740;
+  --line-strong: #2f415c;
+  --line-x-soft: #1e2c47;
+  --line-on-dark: #2f415c;
+  --line-inset: #1a2740;
+
+  --ink: #e8eef7;
+  --ink-2: #a9bbd1;
+  --ink-3: #7a8aa0;
+  --ink-4: #56657c;
+  --ink-5: #7a8aa0;
+  --ink-on-dark: #a9bbd1;
+
+  --accent: #3b82ff;
+  --accent-soft: rgba(59, 130, 255, 0.16);
+  --accent-line: rgba(59, 130, 255, 0.42);
+  --accent-ink: #8db4ff;
+
+  --neutral: #2f415c;
+  --neutral-soft: #16213a;
+  --clay: #22b8b8;
+  --stone: #a9bbd1;
+  --ok: #34d399;
+
+  --sidebar-bg: #070d18;
+  --sidebar-surface-2: #142037;
+  --sidebar-line: #1a2740;
+  --sidebar-text: #7a8aa0;
+  --sidebar-text-strong: #ffffff;
+  --sidebar-section: #56657c;
 }
 
 /* ──────────────────────────────────────────────────────────────────────────

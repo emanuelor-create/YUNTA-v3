@@ -1,513 +1,335 @@
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Avatar } from './Avatar';
-import { YuntaMark } from './YuntaLogo';
-import { applyPalette, getStoredPalette, Palette, PALETTES } from '../lib/palette';
+import { YuntaMark, YuntaWordmark } from './YuntaLogo';
 import { useAuth } from '../features/auth/AuthProvider';
 import { useCurrentUser } from '../features/auth/useCurrentUser';
+import { useDashboard } from '../features/dashboard/useDashboard';
+import { CreateProjectModal } from '../features/projects/CreateProjectModal';
 import { useProjects } from '../features/projects/useProjects';
-import { ChevronIcon, DashboardIcon, FolderIcon, LogoutIcon, SettingsIcon, StarIcon, UsersIcon } from '../features/board/icons';
+import { ChevronIcon, DashboardIcon, FolderIcon, LogoutIcon, PlusIcon, StarIcon, UsersIcon } from '../features/board/icons';
+import { useAppearance, useMediaQuery } from '../lib/appearance';
 import { paletteColor } from '../lib/brandColor';
+import { CAPACITY } from '../lib/capacity';
 
-const COLLAPSE_STORAGE_KEY = 'yunta:sidebar-collapsed';
-const ROLE_LABEL: Record<string, string> = { ADMIN: 'Admin', PM: 'PM', DEVELOPER: 'Developer' };
+/// Cuántos favoritos entran en el menú. Con más, "Ver todos" lleva a Proyectos:
+/// el sidebar nunca scrollea (la lista completa vive en Proyectos).
+const MAX_FAVORITES = 5;
 
-function getStoredCollapsed(): boolean {
-  try {
-    return localStorage.getItem(COLLAPSE_STORAGE_KEY) === 'true';
-  } catch {
-    return false;
-  }
-}
+export const SIDEBAR_WIDTH = 248;
+export const SIDEBAR_COLLAPSED_WIDTH = 64;
 
-type SectionKey = 'favoritos' | 'proyectos' | 'administracion';
-
-export function Sidebar() {
-  const [collapsed, setCollapsed] = useState(getStoredCollapsed);
-  const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
-    favoritos: true,
-    proyectos: true,
-    administracion: true,
-  });
+/// Menú lateral (estructura de SignZen, tokens de Yunta): logo, botón principal,
+/// navegación con grupos plegables, la tarjeta "Tu carga" y al pie "Cerrar
+/// sesión" + modo oscuro. Ocupa el alto de la ventana y no scrollea.
+export function Sidebar({ collapsed }: { collapsed: boolean }) {
   const { signOut } = useAuth();
   const { data: me } = useCurrentUser();
   const { data: projects } = useProjects();
   const navigate = useNavigate();
   const location = useLocation();
+  const { theme, toggleTheme } = useAppearance();
+  const [favoritesOpen, setFavoritesOpen] = useState(true);
+  const [creating, setCreating] = useState(false);
+  // En ventanas bajas la tarjeta de carga cede su lugar a la navegación.
+  const short = useMediaQuery('(max-height: 640px)');
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(COLLAPSE_STORAGE_KEY, String(collapsed));
-    } catch {
-      // Ventana privada u otro bloqueo de localStorage: no es crítico.
-    }
-  }, [collapsed]);
+  const role = me?.profile?.role;
+  const canCreate = role === 'ADMIN' || role === 'PM';
+  const favorites = (projects ?? []).filter((p) => p.isFavorite);
 
-  function toggleSection(key: SectionKey) {
-    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
-  }
+  const isActive = (to: string) => location.pathname === to || location.pathname.startsWith(`${to}/`);
+  const inProject = (id: string) => location.pathname.startsWith(`/projects/${id}`);
 
   async function handleSignOut() {
     await signOut();
     navigate('/login');
   }
 
-  function isActive(to: string): boolean {
-    return location.pathname === to || location.pathname.startsWith(`${to}/`);
-  }
-
   return (
     <aside
+      data-sidebar
       style={{
-        width: collapsed ? 60 : 252,
+        width: collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH,
         flex: 'none',
+        height: '100vh',
+        position: 'sticky',
+        top: 0,
+        overflow: 'hidden',
         background: 'var(--sidebar-bg)',
+        borderRight: '1px solid var(--sidebar-line)',
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'space-between',
-        padding: '22px 0',
+        padding: collapsed ? '18px 10px 14px' : '18px 12px 14px',
+        transition: 'width 160ms ease',
       }}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <div
-          style={{
-            padding: collapsed ? '0 0 22px' : '0 20px 22px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: collapsed ? 'center' : 'space-between',
-            borderBottom: '1px solid var(--sidebar-line)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
-            <YuntaMark size={26} />
-            {!collapsed && (
-              <span
-                style={{
-                  fontSize: 17,
-                  fontWeight: 800,
-                  letterSpacing: '0.04em',
-                  textTransform: 'uppercase',
-                  color: 'var(--sidebar-text-strong)',
-                }}
-              >
-                Yunta
-              </span>
-            )}
-          </div>
-          {!collapsed && (
-            <CollapseButton onClick={() => setCollapsed(true)} direction="left" title="Colapsar" />
-          )}
-        </div>
+      <Link
+        to="/dashboard"
+        title="Yunta"
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 11, padding: '4px 0 20px', textDecoration: 'none' }}
+      >
+        <YuntaMark size={collapsed ? 28 : 30} />
+        {!collapsed && <YuntaWordmark style={{ fontSize: 20 }} />}
+      </Link>
 
-        {collapsed && (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 0' }}>
-            <CollapseButton onClick={() => setCollapsed(false)} direction="right" title="Expandir" />
-          </div>
-        )}
+      {canCreate && (
+        <PrimaryAction collapsed={collapsed} onClick={() => setCreating(true)}>
+          Nuevo proyecto
+        </PrimaryAction>
+      )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '10px 8px 0' }}>
-          <NavItem
-            to="/dashboard"
-            icon={<DashboardIcon size={16} />}
-            label="Dashboard"
-            collapsed={collapsed}
-            active={isActive('/dashboard')}
-          />
+      <nav style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: canCreate ? 12 : 0, flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <NavItem to="/dashboard" icon={<DashboardIcon size={17} />} label="Dashboard" collapsed={collapsed} active={isActive('/dashboard')} />
+        <NavItem to="/projects" icon={<FolderIcon size={17} />} label="Proyectos" collapsed={collapsed} active={location.pathname === '/projects'} />
+
+        {collapsed ? (
           <NavItem
             to="/projects"
-            icon={<FolderIcon size={16} />}
-            label="Todos los proyectos"
-            collapsed={collapsed}
-            active={location.pathname === '/projects'}
+            icon={<StarIcon size={17} filled={favorites.some((p) => inProject(p.id))} />}
+            label={`Favoritos${favorites.length ? ` (${favorites.length})` : ''}`}
+            collapsed
+            active={favorites.some((p) => inProject(p.id))}
           />
-        </div>
-
-        <SidebarSection
-          label="Favoritos"
-          collapsed={collapsed}
-          open={openSections.favoritos}
-          onToggle={() => toggleSection('favoritos')}
-        >
-          {(projects ?? [])
-            .filter((project) => project.isFavorite)
-            .map((project) => (
-              <NavItem
-                key={project.id}
-                to={`/projects/${project.id}/resumen`}
-                icon={<StarIcon size={16} filled />}
-                label={project.name}
-                collapsed={collapsed}
-                active={isActive(`/projects/${project.id}`)}
-              />
-            ))}
-          {!(projects ?? []).some((project) => project.isFavorite) && !collapsed && (
-            <span style={{ fontSize: 12.5, color: 'var(--sidebar-text)', padding: '4px 12px 8px' }}>
-              Sin favoritos todavía
-            </span>
-          )}
-        </SidebarSection>
-
-        <SidebarSection
-          label="Proyectos"
-          collapsed={collapsed}
-          open={openSections.proyectos}
-          onToggle={() => toggleSection('proyectos')}
-        >
-          {(projects ?? []).map((project) => (
-            <NavItem
-              key={project.id}
-              to={`/projects/${project.id}/resumen`}
-              icon={<FolderIcon size={16} />}
-              label={project.name}
-              tint={paletteColor(project.color)}
-              collapsed={collapsed}
-              active={isActive(`/projects/${project.id}`)}
+        ) : (
+          <>
+            <Row
+              icon={<StarIcon size={17} />}
+              label="Favoritos"
+              onClick={() => setFavoritesOpen((v) => !v)}
+              trailing={<ChevronIcon size={9} direction={favoritesOpen ? 'down' : 'right'} />}
+              ariaExpanded={favoritesOpen}
             />
-          ))}
-          {projects?.length === 0 && !collapsed && (
-            <span style={{ fontSize: 12.5, color: 'var(--sidebar-text)', padding: '4px 12px 8px' }}>
-              No sos miembro de ningún proyecto
-            </span>
-          )}
-        </SidebarSection>
+            {favoritesOpen && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 1, paddingLeft: 14 }}>
+                {favorites.slice(0, MAX_FAVORITES).map((project) => (
+                  <Link key={project.id} to={`/projects/${project.id}/resumen`} style={{ textDecoration: 'none' }}>
+                    <Row
+                      icon={<span style={{ width: 3, height: 14, borderRadius: 'var(--radius-tick)', background: paletteColor(project.color), boxShadow: '0 0 0 1px var(--line-on-dark)' }} />}
+                      label={project.name}
+                      active={inProject(project.id)}
+                      small
+                    />
+                  </Link>
+                ))}
+                {favorites.length === 0 && (
+                  <span style={{ fontSize: 12.5, lineHeight: 1.4, color: 'var(--sidebar-section)', padding: '6px 12px 8px' }}>Marcá proyectos con ★ para tenerlos acá.</span>
+                )}
+                {favorites.length > MAX_FAVORITES && (
+                  <Link to="/projects" style={{ textDecoration: 'none' }}>
+                    <Row label={`Ver los ${favorites.length} favoritos`} small muted />
+                  </Link>
+                )}
+              </div>
+            )}
+          </>
+        )}
 
-        <SidebarSection
-          label="Administración"
-          collapsed={collapsed}
-          open={openSections.administracion}
-          onToggle={() => toggleSection('administracion')}
-        >
-          <NavItem
-            to="/admin/users"
-            icon={<UsersIcon size={16} />}
-            label="Usuarios"
-            collapsed={collapsed}
-            active={isActive('/admin/users')}
-          />
-          <NavItem icon={<SettingsIcon size={16} />} label="Ajustes" collapsed={collapsed} disabled />
-        </SidebarSection>
-      </div>
+        {role === 'ADMIN' && (
+          <NavItem to="/admin/users" icon={<UsersIcon size={17} />} label="Usuarios" collapsed={collapsed} active={isActive('/admin/users')} />
+        )}
+      </nav>
+
+      {!collapsed && !short && <WorkloadCard />}
 
       <div
         style={{
-          borderTop: '1px solid var(--sidebar-line)',
-          padding: '14px 12px 0',
           display: 'flex',
-          flexDirection: 'column',
-          gap: 10,
+          flexDirection: collapsed ? 'column' : 'row',
+          alignItems: 'center',
+          gap: collapsed ? 6 : 4,
+          marginTop: 12,
+          paddingTop: 12,
+          borderTop: '1px solid var(--sidebar-line)',
         }}
       >
-        {me?.profile && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 11,
-              justifyContent: collapsed ? 'center' : 'flex-start',
-              padding: '0 0 4px',
-            }}
-          >
-            <Avatar seed={me.userId} name={me.profile.name} size={32} />
-            {!collapsed && (
-              <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-                <span
-                  style={{
-                    fontSize: 14,
-                    fontWeight: 600,
-                    color: 'var(--sidebar-text-strong)',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}
-                >
-                  {me.profile.name}
-                </span>
-                <span
-                  style={{
-                    fontWeight: 600,
-                    fontSize: 10.5,
-                    letterSpacing: '0.12em',
-                    color: 'var(--sidebar-section)',
-                  }}
-                >
-                  {ROLE_LABEL[me.profile.role] ?? me.profile.role}
-                </span>
-              </span>
-            )}
-          </div>
-        )}
-
-        <PalettePicker collapsed={collapsed} />
-
-        <SidebarRow
-          icon={<LogoutIcon size={16} />}
-          label="Salir"
-          collapsed={collapsed}
-          onClick={handleSignOut}
-        />
+        <button type="button" onClick={handleSignOut} title="Cerrar sesión" style={{ ...bare, flex: collapsed ? 'none' : 1 }}>
+          <Row icon={<LogoutIcon size={17} />} label="Cerrar sesión" collapsedIcon={collapsed} />
+        </button>
+        <IconButton title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'} pressed={theme === 'dark'} onClick={toggleTheme}>
+          {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
+        </IconButton>
       </div>
+
+      {creating && <CreateProjectModal onClose={() => setCreating(false)} />}
     </aside>
   );
 }
 
-/// Cuadrados de 20px con el color de cada paleta (PALETTE.md §3). Con la barra
-/// colapsada se apilan en columna.
-function PalettePicker({ collapsed }: { collapsed: boolean }) {
-  const [current, setCurrent] = useState<Palette>(getStoredPalette);
+const bare = { background: 'transparent', border: 0, padding: 0, cursor: 'pointer', fontFamily: 'var(--sans)', textAlign: 'left' as const, minWidth: 0 };
+
+/// "Tu carga": tus tareas abiertas contra la capacidad del equipo (la misma
+/// cuenta del Dashboard), en el lugar donde SignZen muestra el plan.
+function WorkloadCard() {
+  const { data } = useDashboard();
+  if (!data) return null;
+  const { assigned, overdue, dueSoon } = data.me;
+  const pct = Math.min(100, (assigned / CAPACITY) * 100);
+  const over = assigned > CAPACITY;
   return (
-    <div
-      role="radiogroup"
-      aria-label="Paleta de color"
-      style={{
-        display: 'flex',
-        flexDirection: collapsed ? 'column' : 'row',
-        alignItems: 'center',
-        gap: 10,
-        padding: collapsed ? '4px 0' : '4px 12px',
-      }}
-    >
-      {!collapsed && (
-        <span style={{ fontWeight: 600, fontSize: 10.5, letterSpacing: '0.12em', color: 'var(--sidebar-section)', marginRight: 'auto' }}>
-          PALETA
+    <Link to="/dashboard" data-workload style={{ textDecoration: 'none', marginTop: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 9, padding: '12px 14px', background: 'var(--sidebar-surface-2)', borderRadius: 'var(--radius-card)' }}>
+        <span style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--sidebar-text-strong)' }}>Tu carga</span>
+          <span style={{ fontSize: 12, color: over ? 'var(--accent)' : 'var(--sidebar-text)' }}>
+            {assigned} / {CAPACITY}
+          </span>
         </span>
-      )}
-      {PALETTES.map((p) => {
-        const active = p.id === current;
-        return (
-          <button
-            key={p.id}
-            role="radio"
-            aria-checked={active}
-            title={p.label}
-            onClick={() => {
-              applyPalette(p.id);
-              setCurrent(p.id);
-            }}
-            style={{
-              width: 20,
-              height: 20,
-              padding: 0,
-              border: 0,
-              borderRadius: 'var(--radius-tick)',
-              background: p.swatch,
-              cursor: 'pointer',
-              outline: active ? '2px solid var(--accent)' : 'none',
-              outlineOffset: 2,
-            }}
-          />
-        );
-      })}
-    </div>
-  );
-}
-
-function CollapseButton({
-  onClick,
-  direction,
-  title,
-}: {
-  onClick: () => void;
-  direction: 'left' | 'right';
-  title: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      title={title}
-      style={{
-        width: 22,
-        height: 22,
-        flex: 'none',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        border: '1px solid var(--sidebar-line)',
-        borderRadius: 'var(--radius-tick)',
-        background: 'transparent',
-        color: 'var(--sidebar-text)',
-        cursor: 'pointer',
-      }}
-    >
-      <ChevronIcon size={9} direction={direction} />
-    </button>
-  );
-}
-
-function SidebarSection({
-  label,
-  collapsed,
-  open,
-  onToggle,
-  children,
-}: {
-  label: string;
-  collapsed: boolean;
-  open: boolean;
-  onToggle: () => void;
-  children: ReactNode;
-}) {
-  if (collapsed) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <div style={{ borderTop: '1px solid var(--sidebar-line)', margin: '12px 12px 0' }} />
-        <div style={{ padding: '10px 0 0', display: 'flex', flexDirection: 'column', gap: 2 }}>{children}</div>
+        <span style={{ height: 5, borderRadius: 3, background: 'var(--sidebar-line)', overflow: 'hidden' }}>
+          <span style={{ display: 'block', height: '100%', width: `${pct}%`, background: over ? 'var(--accent)' : 'var(--sidebar-text-strong)', borderRadius: 3 }} />
+        </span>
+        <span style={{ fontSize: 11.5, color: 'var(--sidebar-text)' }}>
+          {overdue > 0 ? <span style={{ color: 'var(--accent)' }}>{overdue} {overdue === 1 ? 'vencida' : 'vencidas'}</span> : 'Nada vencido'} · {dueSoon}{' '}
+          {dueSoon === 1 ? 'vence' : 'vencen'} esta semana
+        </span>
       </div>
-    );
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
-      <button
-        onClick={onToggle}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 7,
-          padding: '18px 12px 7px',
-          background: 'transparent',
-          border: 0,
-          cursor: 'pointer',
-          fontFamily: 'var(--sans)',
-          fontWeight: 600,
-          fontSize: 10.5,
-          letterSpacing: '0.13em',
-          textTransform: 'uppercase',
-          color: 'var(--sidebar-section)',
-          width: '100%',
-        }}
-      >
-        <ChevronIcon size={8} direction={open ? 'down' : 'right'} />
-        {label}
-      </button>
-      {open && <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '0 12px' }}>{children}</div>}
-    </div>
-  );
-}
-
-function NavItem({
-  to,
-  icon,
-  label,
-  tint,
-  collapsed,
-  active,
-  disabled,
-}: {
-  to?: string;
-  icon: ReactNode;
-  label: string;
-  /** Marca de color del proyecto (SIDEBAR.md: 3×16px antes del ícono). */
-  tint?: string;
-  collapsed: boolean;
-  active?: boolean;
-  disabled?: boolean;
-}) {
-  if (disabled || !to) {
-    return (
-      <SidebarRow icon={icon} label={label} collapsed={collapsed} disabled={disabled} badge={disabled ? 'Pronto' : undefined} />
-    );
-  }
-  return (
-    <Link to={to} style={{ textDecoration: 'none' }} title={collapsed ? label : undefined}>
-      <SidebarRow icon={icon} label={label} tint={tint} collapsed={collapsed} active={active} />
     </Link>
   );
 }
 
-function SidebarRow({
-  icon,
-  label,
-  tint,
-  collapsed,
-  active,
-  disabled,
-  badge,
-  onClick,
-}: {
-  icon: ReactNode;
-  label: string;
-  tint?: string;
-  collapsed: boolean;
-  active?: boolean;
-  disabled?: boolean;
-  badge?: string;
-  onClick?: () => void;
-}) {
+function PrimaryAction({ children, onClick, collapsed }: { children: string; onClick: () => void; collapsed: boolean }) {
   const [hover, setHover] = useState(false);
-  const highlighted = !disabled && (active || hover);
-
-  const row = (
-    <span
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={collapsed ? children : undefined}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      title={collapsed ? label : undefined}
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 10,
-        minHeight: 38,
-        padding: collapsed ? '10px 0' : '10px 12px',
-        justifyContent: collapsed ? 'center' : 'flex-start',
-        borderRadius: 'var(--radius)',
-        background: highlighted ? 'var(--sidebar-surface-2)' : 'transparent',
-        color: highlighted ? 'var(--sidebar-text-strong)' : 'var(--sidebar-text)',
+        justifyContent: 'center',
+        gap: 9,
+        width: '100%',
+        height: 42,
+        flex: 'none',
         fontFamily: 'var(--sans)',
         fontSize: 14,
-        fontWeight: active ? 600 : 500,
-        opacity: disabled ? 0.55 : 1,
-        cursor: disabled ? 'default' : 'pointer',
-        boxShadow: active ? 'inset 2px 0 0 var(--accent)' : undefined,
-        width: '100%',
+        fontWeight: 600,
+        color: '#ffffff',
+        background: 'var(--accent)',
+        filter: hover ? 'brightness(1.08)' : undefined,
         border: 0,
-        textAlign: 'left',
+        borderRadius: 'var(--radius)',
+        cursor: 'pointer',
       }}
     >
-      {tint && !collapsed && (
-        <span
-          style={{
-            width: 3,
-            height: 16,
-            flex: 'none',
-            background: tint,
-            borderRadius: 'var(--radius-tick)',
-            // Un proyecto de color tinta es del mismo tono que el fondo del
-            // sidebar: sin contorno, su marca no se ve.
-            boxShadow: '0 0 0 1px var(--line-on-dark)',
-          }}
-        />
-      )}
-      <span style={{ width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
-        {icon}
-      </span>
-      {!collapsed && (
-        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {label}
-        </span>
-      )}
-      {!collapsed && badge && (
-        <span
-          style={{
-            fontWeight: 600,
-            fontSize: 9,
-            letterSpacing: '0.1em',
-            textTransform: 'uppercase',
-            color: 'var(--sidebar-section)',
-            border: '1px solid var(--sidebar-line)',
-            padding: '2px 6px',
-            borderRadius: 'var(--radius-pill)',
-            flex: 'none',
-          }}
-        >
-          {badge}
-        </span>
-      )}
+      <PlusIcon size={16} />
+      {!collapsed && children}
+    </button>
+  );
+}
+
+function NavItem({ to, icon, label, collapsed, active }: { to: string; icon: ReactNode; label: string; collapsed: boolean; active?: boolean }) {
+  return (
+    <Link to={to} style={{ textDecoration: 'none' }} title={collapsed ? label : undefined} aria-current={active ? 'page' : undefined}>
+      <Row icon={icon} label={label} active={active} collapsedIcon={collapsed} />
+    </Link>
+  );
+}
+
+/// Fila del menú. `collapsedIcon`: solo el ícono, centrado (barra angosta).
+function Row({
+  icon,
+  label,
+  active,
+  onClick,
+  trailing,
+  collapsedIcon,
+  small,
+  muted,
+  ariaExpanded,
+}: {
+  icon?: ReactNode;
+  label: string;
+  active?: boolean;
+  onClick?: () => void;
+  trailing?: ReactNode;
+  collapsedIcon?: boolean;
+  small?: boolean;
+  muted?: boolean;
+  ariaExpanded?: boolean;
+}) {
+  const [hover, setHover] = useState(false);
+  const lit = active || hover;
+  const content = (
+    <span
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title={collapsedIcon ? label : undefined}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 11,
+        height: small ? 32 : 38,
+        padding: collapsedIcon ? 0 : '0 12px',
+        justifyContent: collapsedIcon ? 'center' : 'flex-start',
+        borderRadius: 'var(--radius)',
+        background: lit ? 'var(--sidebar-surface-2)' : 'transparent',
+        color: lit ? 'var(--sidebar-text-strong)' : muted ? 'var(--sidebar-section)' : 'var(--sidebar-text)',
+        fontFamily: 'var(--sans)',
+        fontSize: small ? 13.5 : 14.5,
+        fontWeight: active ? 600 : 500,
+        width: '100%',
+        boxSizing: 'border-box',
+      }}
+    >
+      {icon && <span style={{ width: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>{icon}</span>}
+      {!collapsedIcon && <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>}
+      {!collapsedIcon && trailing && <span style={{ display: 'flex', opacity: 0.8 }}>{trailing}</span>}
     </span>
   );
-
-  if (!onClick) return row;
+  if (!onClick) return content;
   return (
-    <button onClick={onClick} disabled={disabled} style={{ background: 'transparent', border: 0, padding: 0, cursor: 'pointer' }}>
-      {row}
+    <button type="button" onClick={onClick} aria-expanded={ariaExpanded} style={{ ...bare, width: '100%' }}>
+      {content}
     </button>
+  );
+}
+
+function IconButton({ children, title, onClick, pressed }: { children: ReactNode; title: string; onClick: () => void; pressed?: boolean }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      aria-pressed={pressed}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        width: 38,
+        height: 38,
+        flex: 'none',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 'var(--radius)',
+        border: 0,
+        cursor: 'pointer',
+        background: hover ? 'var(--sidebar-surface-2)' : 'transparent',
+        color: hover ? 'var(--sidebar-text-strong)' : 'var(--sidebar-text)',
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+export function MoonIcon({ size = 17 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" />
+    </svg>
+  );
+}
+
+export function SunIcon({ size = 17 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+    </svg>
   );
 }

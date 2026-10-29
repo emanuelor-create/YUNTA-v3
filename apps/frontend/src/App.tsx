@@ -8,6 +8,7 @@ import { DashboardPage } from './features/dashboard/DashboardPage';
 import { LoginPage } from './features/auth/LoginPage';
 import { ProtectedRoute } from './features/auth/ProtectedRoute';
 import { ResetPasswordPage } from './features/auth/ResetPasswordPage';
+import { ProfilePage } from './features/profile/ProfilePage';
 import { ProjectsPage } from './features/projects/ProjectsPage';
 import { ProjectSummaryTab } from './features/projects/ProjectSummaryTab';
 
@@ -35,6 +36,7 @@ export default function App() {
           <Route path="/projects/:id/backlog" element={<BacklogPage />} />
           <Route path="/projects/:id/tablero" element={<BoardPage />} />
           <Route path="/admin/users" element={<AdminUsersPage />} />
+          <Route path="/perfil" element={<ProfilePage />} />
         </Route>
       </Route>
     </Routes>
