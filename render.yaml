@@ -32,6 +32,6 @@ services:
         sync: false
       # Públicas.
       - key: SUPABASE_URL
-        value: https://wixqctxwxubqmbukxvvc.supabase.co
+        value: https://bamxgsztvvfptspoeouy.supabase.co
       - key: CORS_ORIGIN
         value: https://emanuelor-create.github.io
