@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Yunta</title>
+    <!-- Paleta y modo guardados (lib/palette.ts, lib/theme.ts), antes del bundle para que no parpadeen. -->
+    <script>
+      (function () {
+        try {
+          var p = localStorage.getItem('yunta.palette');
+          if (p === 'azul') document.documentElement.dataset.palette = p;
+          if (localStorage.getItem('yunta.theme') === 'dark') document.documentElement.dataset.theme = 'dark';
+        } catch (e) {}
+      })();
+    </script>
+    <script type="module" crossorigin src="/YUNTA-v3/assets/index-C5Qr27gp.js"></script>
+    <link rel="stylesheet" crossorigin href="/YUNTA-v3/assets/index-3WfPRD-_.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
