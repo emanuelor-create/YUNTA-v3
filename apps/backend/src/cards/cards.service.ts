@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { Card, CardPriority, Column, Prisma } from '@prisma/client';
+import { Card, CardPriority, Column, LabelTone, Prisma } from '@prisma/client';
 import { ActivityLogService } from '../activity/activity-log.service';
 import { projectAccess } from '../auth/project-access';
 import { cardCode } from '../projects/project-key';
@@ -16,6 +16,15 @@ const PRIORITY_LABEL: Record<CardPriority, string> = { ALTA: 'Alta', MEDIA: 'Med
 const MAX_TITLE_LENGTH = 200;
 const MAX_EFFORT_NOTE_LENGTH = 500;
 const MAX_SUBTASKS = 12;
+const MAX_LABEL_LENGTH = 30;
+/// Las etiquetas nuevas de un proyecto rotan entre los tres tonos del diseño.
+const LABEL_TONES: LabelTone[] = ['ACCENT', 'NEUTRAL', 'PLAIN'];
+
+export interface CardLabelView {
+  id: string;
+  name: string;
+  tone: LabelTone;
+}
 
 /// La entrega es una FECHA, sin hora: se guarda a las 15:00 UTC (mediodía en
 /// Argentina), la misma convención de las fechas de proyecto, para que caiga en
@@ -39,6 +48,8 @@ export interface CardDetail {
   title: string;
   description: string | null;
   priority: CardPriority | null;
+  /// Inicio planificado ('AAAA-MM-DDT15:00:00Z') o null.
+  startDate: string | null;
   dueDate: string | null;
   /// Mismas definiciones que el Dashboard y el Resumen (card-metrics.ts).
   dueState: 'overdue' | 'soon' | null;
@@ -48,6 +59,12 @@ export interface CardDetail {
   effortNote: string | null;
   completed: boolean;
   createdAt: string;
+  updatedAt: string;
+  /// Quién la creó, según la Actividad; null si la entrada ya no existe.
+  createdBy: string | null;
+  labels: CardLabelView[];
+  /// Para "+ Etiqueta": las etiquetas que ya existen en el proyecto.
+  projectLabels: CardLabelView[];
   column: { id: string; name: string };
   /// Para el selector de estado: las columnas del tablero, en orden.
   columns: { id: string; name: string }[];
@@ -308,6 +325,7 @@ export class CardsService {
           },
         },
         assignees: { include: { user: { select: { id: true, name: true } } }, orderBy: { createdAt: 'asc' } },
+        labels: { orderBy: { createdAt: 'asc' }, select: { label: { select: { id: true, name: true, tone: true } } } },
         column: {
           include: {
             board: {
@@ -323,12 +341,22 @@ export class CardsService {
     if (!card) throw new NotFoundException(`Card ${cardId} no encontrada`);
 
     const project = card.column.board.project;
-    const [access, members] = await Promise.all([
+    const [access, members, projectLabels, created] = await Promise.all([
       projectAccess(this.prisma, project.id, userId),
       this.prisma.projectMember.findMany({
         where: { projectId: project.id },
         select: { user: { select: { id: true, name: true } } },
         orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.label.findMany({
+        where: { projectId: project.id },
+        select: { id: true, name: true, tone: true },
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.activityLog.findFirst({
+        where: { cardId: card.id, type: 'CARD_CREATED' },
+        orderBy: { createdAt: 'asc' },
+        select: { user: { select: { name: true } } },
       }),
     ]);
 
@@ -339,6 +367,7 @@ export class CardsService {
       title: card.title,
       description: card.description,
       priority: card.priority,
+      startDate: card.startDate?.toISOString() ?? null,
       dueDate: card.dueDate?.toISOString() ?? null,
       dueState: dueState(card, new Date()),
       progress: card.progress,
@@ -346,6 +375,10 @@ export class CardsService {
       effortNote: card.effortNote,
       completed: card.completedAt !== null,
       createdAt: card.createdAt.toISOString(),
+      updatedAt: card.updatedAt.toISOString(),
+      createdBy: created?.user.name ?? null,
+      labels: card.labels.map((l) => l.label),
+      projectLabels,
       column: { id: card.column.id, name: card.column.name },
       columns: card.column.board.columns,
       project,
@@ -617,7 +650,7 @@ export class CardsService {
   /// Fecha de entrega: 'AAAA-MM-DD' o null (sin fecha). Idempotente. Un
   /// contenedor no tiene fecha propia: la tienen sus subtareas.
   async updateDueDate(cardId: string, value: string | null, actorId: string): Promise<Card> {
-    const dueDate = this.parseDueDate(value);
+    const dueDate = this.parseDate(value, 'dueDate');
     const card = await this.getCardOrThrow(cardId);
     this.assertNotContainer(card, 'no tiene fecha de entrega propia, la tienen sus subtareas.');
     if ((card.dueDate?.getTime() ?? null) === (dueDate?.getTime() ?? null)) return card;
@@ -639,6 +672,96 @@ export class CardsService {
       cardTitle: card.title,
     });
     return updated;
+  }
+
+  /// Fecha de inicio: 'AAAA-MM-DD' o null. Misma convención y reglas que la
+  /// entrega. No se exige que sea anterior a la entrega: se pueden cargar en
+  /// cualquier orden, y el detalle avisa si quedan cruzadas.
+  async updateStartDate(cardId: string, value: string | null, actorId: string): Promise<Card> {
+    const startDate = this.parseDate(value, 'startDate');
+    const card = await this.getCardOrThrow(cardId);
+    this.assertNotContainer(card, 'no tiene fecha de inicio propia, la tienen sus subtareas.');
+    if ((card.startDate?.getTime() ?? null) === (startDate?.getTime() ?? null)) return card;
+
+    const updated = await this.prisma.card.update({ where: { id: cardId }, data: { startDate } });
+
+    const message =
+      startDate === null
+        ? 'quitó la fecha de inicio'
+        : card.startDate === null
+          ? `fijó el inicio para el ${formatDueDate(startDate)}`
+          : `cambió el inicio del ${formatDueDate(card.startDate)} al ${formatDueDate(startDate)}`;
+    await this.activityLog.log({
+      projectId: card.column.board.projectId,
+      userId: actorId,
+      type: 'CARD_UPDATED',
+      message,
+      cardId: card.id,
+      cardTitle: card.title,
+    });
+    return updated;
+  }
+
+  /// "+ Etiqueta": agrega por nombre. Si el proyecto ya tiene una con ese nombre
+  /// (sin distinguir mayúsculas) se reutiliza; si no, se crea con el próximo
+  /// tono de la rotación. Idempotente: agregarla dos veces no la duplica.
+  async addLabel(cardId: string, rawName: unknown, actorId: string): Promise<CardLabelView> {
+    const name = typeof rawName === 'string' ? rawName.trim().replace(/\s+/g, ' ') : '';
+    if (!name) throw new BadRequestException('El nombre de la etiqueta no puede estar vacío');
+    if (name.length > MAX_LABEL_LENGTH) {
+      throw new BadRequestException(`La etiqueta puede tener hasta ${MAX_LABEL_LENGTH} caracteres`);
+    }
+    const card = await this.getCardOrThrow(cardId);
+    const projectId = card.column.board.projectId;
+
+    const label = await this.prisma.$transaction(async (tx) => {
+      const existing = await tx.label.findFirst({
+        where: { projectId, name: { equals: name, mode: 'insensitive' } },
+        select: { id: true, name: true, tone: true },
+      });
+      const label =
+        existing ??
+        (await tx.label.create({
+          data: { projectId, name, tone: LABEL_TONES[(await tx.label.count({ where: { projectId } })) % LABEL_TONES.length] },
+          select: { id: true, name: true, tone: true },
+        }));
+      const already = await tx.cardLabel.findUnique({ where: { cardId_labelId: { cardId, labelId: label.id } } });
+      if (already) return { label, added: false };
+      await tx.cardLabel.create({ data: { cardId, labelId: label.id } });
+      return { label, added: true };
+    });
+
+    if (label.added) {
+      await this.activityLog.log({
+        projectId,
+        userId: actorId,
+        type: 'CARD_UPDATED',
+        message: `agregó la etiqueta "${label.label.name}"`,
+        cardId: card.id,
+        cardTitle: card.title,
+      });
+    }
+    return label.label;
+  }
+
+  /// Quita la etiqueta de la tarjeta. La etiqueta sigue existiendo en el
+  /// proyecto (para volver a elegirla). Idempotente.
+  async removeLabel(cardId: string, labelId: string, actorId: string): Promise<void> {
+    const card = await this.getCardOrThrow(cardId);
+    const label = await this.prisma.label.findUnique({ where: { id: labelId }, select: { name: true, projectId: true } });
+    if (!label || label.projectId !== card.column.board.projectId) {
+      throw new NotFoundException('La etiqueta no existe en este proyecto');
+    }
+    const { count } = await this.prisma.cardLabel.deleteMany({ where: { cardId, labelId } });
+    if (!count) return;
+    await this.activityLog.log({
+      projectId: label.projectId,
+      userId: actorId,
+      type: 'CARD_UPDATED',
+      message: `quitó la etiqueta "${label.name}"`,
+      cardId: card.id,
+      cardTitle: card.title,
+    });
   }
 
   /// Borra la tarjeta con sus adjuntos, comentarios y asignados (cascada). Una
@@ -684,15 +807,15 @@ export class CardsService {
     });
   }
 
-  private parseDueDate(value: string | null): Date | null {
+  private parseDate(value: string | null, field: 'dueDate' | 'startDate'): Date | null {
     if (value === null) return null;
     const match = typeof value === 'string' ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(value) : null;
-    if (!match) throw new BadRequestException("dueDate debe ser una fecha 'AAAA-MM-DD' o null");
+    if (!match) throw new BadRequestException(`${field} debe ser una fecha 'AAAA-MM-DD' o null`);
     const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
     const date = new Date(Date.UTC(year, month - 1, day, DUE_DATE_HOUR_UTC));
     // Date.UTC(2026, 1, 31) se "corrige" a marzo: se rechaza en vez de guardar otra fecha.
     if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
-      throw new BadRequestException(`dueDate no es una fecha válida: ${value}`);
+      throw new BadRequestException(`${field} no es una fecha válida: ${value}`);
     }
     return date;
   }

@@ -79,6 +79,7 @@ model Project {
   members  ProjectMember[]
   board     Board?
   activity  ActivityLog[]
+  labels    Label[]
   snapshots ProjectDailySnapshot[]
 }
 
@@ -133,6 +134,8 @@ model Card {
   title       String
   description String?
   position    Int
+  /// Inicio planificado. FECHA sin hora, misma convención que dueDate (15:00 UTC).
+  startDate   DateTime?
   dueDate     DateTime?
 
   /// Número correlativo dentro del proyecto: código = `${project.key}-${number}`.
@@ -166,6 +169,7 @@ model Card {
 
   column      Column           @relation(fields: [columnId], references: [id], onDelete: Cascade)
   assignees   CardAssignee[]
+  labels      CardLabel[]
   attachments CardAttachment[]
   comments    Comment[]
   /// SetNull, no Cascade: si un contenedor desaparece, sus hijas son trabajo
@@ -307,4 +311,39 @@ model Comment {
   author User @relation(fields: [authorId], references: [id])
 
   @@index([cardId, createdAt])
+}
+
+/// Tono de una etiqueta: los tres del diseño (Yunta-Tarjeta-Detalle). Se asigna
+/// al crearla, rotando, para que etiquetas vecinas no queden del mismo color.
+enum LabelTone {
+  ACCENT
+  NEUTRAL
+  PLAIN
+}
+
+/// Etiqueta de un proyecto ("Diseño", "Checkout"…). Se crean al escribirlas en
+/// una tarjeta; el nombre es único dentro del proyecto sin distinguir mayúsculas.
+model Label {
+  id        String    @id @default(cuid())
+  projectId String
+  name      String
+  tone      LabelTone @default(NEUTRAL)
+  createdAt DateTime  @default(now())
+
+  project Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  cards   CardLabel[]
+
+  @@unique([projectId, name])
+}
+
+model CardLabel {
+  cardId    String
+  labelId   String
+  createdAt DateTime @default(now())
+
+  card  Card  @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  label Label @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([cardId, labelId])
+  @@index([labelId])
 }

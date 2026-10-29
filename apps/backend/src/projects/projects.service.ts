@@ -38,6 +38,7 @@ export interface BoardCard {
   completed: boolean;
   storyPoints: number | null;
   assignees: { id: string; name: string }[];
+  labels: { id: string; name: string; tone: 'ACCENT' | 'NEUTRAL' | 'PLAIN' }[];
   /// Subtarea: el código de su tarjeta madre. Contenedor: null.
   parentCode: string | null;
   /// Contenedor: cuántas subtareas tiene y cuántas están hechas ("3 subtareas ·
@@ -284,6 +285,7 @@ export class ProjectsService {
                     parent: { select: { number: true } },
                     children: { select: { completedAt: true } },
                     assignees: { orderBy: { createdAt: 'asc' }, select: { user: { select: { id: true, name: true } } } },
+                    labels: { orderBy: { createdAt: 'asc' }, select: { label: { select: { id: true, name: true, tone: true } } } },
                   },
                 },
               },
@@ -319,6 +321,7 @@ export class ProjectsService {
           completed: card.completedAt !== null,
           storyPoints: card.storyPoints,
           assignees: card.assignees.map((a) => a.user),
+          labels: card.labels.map((l) => l.label),
           parentCode: card.parent ? cardCode(project.key, card.parent.number) : null,
           subtasks: card.children.length
             ? { total: card.children.length, done: card.children.filter((c) => c.completedAt !== null).length }

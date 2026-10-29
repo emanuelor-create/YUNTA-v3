@@ -14,6 +14,7 @@ const card = (id: string, number: number, over: Record<string, unknown> = {}) =>
   completedAt: null,
   storyPoints: null,
   assignees: [],
+  labels: [],
   parent: null,
   children: [],
   ...over,

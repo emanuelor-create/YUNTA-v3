@@ -39,6 +39,15 @@ interface UpdateDueDateBody {
   dueDate?: string | null;
 }
 
+interface UpdateStartDateBody {
+  /// 'AAAA-MM-DD' o null (sin fecha); undefined (campo ausente) es un error.
+  startDate?: string | null;
+}
+
+interface AddLabelBody {
+  name?: string;
+}
+
 @Controller('cards')
 @UseGuards(AuthGuard, RolesGuard)
 @ProjectScope('card', 'id')
@@ -117,6 +126,29 @@ export class CardsController {
       throw new BadRequestException('dueDate es requerido (usá null para quitar la fecha)');
     }
     return this.cards.updateDueDate(id, body.dueDate, request.auth.userId);
+  }
+
+  @Patch(':id/start-date')
+  @ProjectRoles(ProjectRole.OWNER, ProjectRole.EDITOR)
+  updateStartDate(@Param('id') id: string, @Body() body: UpdateStartDateBody, @Req() request: AuthenticatedRequest) {
+    if (body.startDate === undefined) {
+      throw new BadRequestException('startDate es requerido (usá null para quitar la fecha)');
+    }
+    return this.cards.updateStartDate(id, body.startDate, request.auth.userId);
+  }
+
+  @Post(':id/labels')
+  @HttpCode(201)
+  @ProjectRoles(ProjectRole.OWNER, ProjectRole.EDITOR)
+  addLabel(@Param('id') id: string, @Body() body: AddLabelBody, @Req() request: AuthenticatedRequest) {
+    return this.cards.addLabel(id, body.name, request.auth.userId);
+  }
+
+  @Delete(':id/labels/:labelId')
+  @HttpCode(204)
+  @ProjectRoles(ProjectRole.OWNER, ProjectRole.EDITOR)
+  async removeLabel(@Param('id') id: string, @Param('labelId') labelId: string, @Req() request: AuthenticatedRequest) {
+    await this.cards.removeLabel(id, labelId, request.auth.userId);
   }
 
   /// Borra la tarjeta (con adjuntos y comentarios). Una dividida en subtareas se rechaza con 409.

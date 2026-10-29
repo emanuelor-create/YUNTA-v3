@@ -253,6 +253,9 @@ describe('CardsService — subtareas', () => {
       completedAt: null,
       parentId: null,
       createdAt: new Date('2026-09-01'),
+      updatedAt: new Date('2026-09-01'),
+      startDate: null,
+      labels: [],
       parent: null,
       children: [],
       assignees: [],
@@ -262,6 +265,8 @@ describe('CardsService — subtareas', () => {
     beforeEach(() => {
       prisma.projectMember = { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn().mockResolvedValue({ role: 'EDITOR' }) };
       prisma.user = { findUnique: jest.fn().mockResolvedValue({ role: 'DEVELOPER' }) };
+      prisma.label = { findMany: jest.fn().mockResolvedValue([]) };
+      prisma.activityLog = { findFirst: jest.fn().mockResolvedValue(null) };
     });
 
     it('un contenedor lista sus subtareas con código, avance, esfuerzo y columna; y no se puede volver a dividir', async () => {

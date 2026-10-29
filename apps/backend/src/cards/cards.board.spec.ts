@@ -119,6 +119,8 @@ describe('CardsService — orden, alta y detalle', () => {
       project: { update: jest.fn() },
       projectMember: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn() },
       user: { findUnique: jest.fn() },
+      label: { findMany: jest.fn().mockResolvedValue([]) },
+      activityLog: { findFirst: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn(),
     };
     prisma.$transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(prisma));
@@ -448,6 +450,9 @@ describe('CardsService — orden, alta y detalle', () => {
       storyPoints: 13,
       effortNote: 'No se puede partir',
       createdAt: new Date('2026-09-01'),
+      updatedAt: new Date('2026-09-02'),
+      startDate: null,
+      labels: [],
       assignees: [{ user: { id: 'u1', name: 'Ana' } }],
       column: {
         id: 'doing',
