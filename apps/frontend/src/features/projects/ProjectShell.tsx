@@ -10,7 +10,7 @@ import { deriveStatus, dueNote, STATUS_LABEL, STATUS_STYLE } from './projectStat
 import { ProjectDetail, useProjectDetail } from './useProjectDetail';
 import { useToggleFavorite } from './useProjects';
 
-export type ProjectTab = 'resumen' | 'tablero';
+export type ProjectTab = 'resumen' | 'backlog' | 'tablero';
 
 export interface ProjectShellContext {
   project: ProjectDetail;
@@ -21,14 +21,14 @@ export interface ProjectShellContext {
   openSettings: (focusOwner?: boolean) => void;
 }
 
-const TABS: { key: ProjectTab | 'backlog' | 'calendario'; label: string; enabled: boolean }[] = [
+const TABS: { key: ProjectTab | 'calendario'; label: string; enabled: boolean }[] = [
   { key: 'resumen', label: 'Resumen', enabled: true },
-  { key: 'backlog', label: 'Backlog', enabled: false },
+  { key: 'backlog', label: 'Backlog', enabled: true },
   { key: 'tablero', label: 'Tablero', enabled: true },
   { key: 'calendario', label: 'Calendario', enabled: false },
 ];
 
-/// Encabezado y pestañas que comparten Resumen y Tablero: breadcrumb, nombre,
+/// Encabezado y pestañas que comparten Resumen, Backlog y Tablero: breadcrumb, nombre,
 /// favorito, estado, engranaje de configuración, "Nueva tarea" y las tabs. El
 /// contenido de cada pestaña llega como `children`.
 export function ProjectShell({

@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AppLayout } from './components/AppLayout';
 import { AdminUsersPage } from './features/admin/AdminUsersPage';
+import { BacklogPage } from './features/board/BacklogPage';
 import { useAuth } from './features/auth/AuthProvider';
 import { BoardPage } from './features/board/BoardPage';
 import { DashboardPage } from './features/dashboard/DashboardPage';
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/projects/:id/resumen" element={<ProjectSummaryTab />} />
+          <Route path="/projects/:id/backlog" element={<BacklogPage />} />
           <Route path="/projects/:id/tablero" element={<BoardPage />} />
           <Route path="/admin/users" element={<AdminUsersPage />} />
         </Route>
